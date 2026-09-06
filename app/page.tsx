@@ -107,7 +107,7 @@ const EFFECT_INFO: Record<
   chorus: { name: 'Chorus', icon: Waves, color: '#f08aaa' },
   saturator: { name: 'Saturator', icon: Zap, color: '#f28b54' },
 };
-const PITCHES = Array.from({ length: 24 }, (_, i) => 71 - i);
+const PITCHES = Array.from({ length: 128 }, (_, i) => 127 - i);
 const NOTE_NAMES = [
   'C',
   'C♯',
@@ -342,6 +342,7 @@ export default function Home() {
     recorder = useRef<MediaRecorder | null>(null),
     chunks = useRef<Blob[]>([]),
     fileInput = useRef<HTMLInputElement>(null);
+  const pianoEditor = useRef<HTMLDivElement>(null);
   const gesture = useRef<{
     clipId: string;
     trackId: string;
@@ -840,6 +841,13 @@ export default function Home() {
       window.removeEventListener('pointerup', up);
     };
   }, [noteSnap, selectedClip, updateClip]);
+
+  useEffect(() => {
+    if (bottomMode !== 'piano' || !selectedClipId) return;
+    requestAnimationFrame(() => {
+      if (pianoEditor.current) pianoEditor.current.scrollTop = 67 * 22 - pianoEditor.current.clientHeight / 2;
+    });
+  }, [bottomMode, selectedClipId]);
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -1586,7 +1594,7 @@ export default function Home() {
                 )}
             </div>
           ) : selectedClip?.type === 'midi' ? (
-            <div className="piano-editor">
+            <div className="piano-editor" ref={pianoEditor}>
               <div className="piano-keys">
                 {PITCHES.map((pitch) => (
                   <span
