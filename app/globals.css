@@ -1084,7 +1084,7 @@ input[type='range'] {
 }
 .drum-midi-toolbar label {
   display: grid;
-  grid-template-columns: auto 180px;
+  grid-template-columns: auto 110px;
   align-items: center;
   gap: 7px;
 }
@@ -1121,7 +1121,8 @@ input[type='range'] {
 }
 .drum-step-ruler {
   display: grid;
-  grid-template-columns: repeat(16, minmax(32px, 1fr));
+  grid-template-columns: repeat(var(--drum-columns), minmax(22px, 1fr));
+  min-width: max(570px, calc(var(--drum-columns) * 22px));
 }
 .drum-step-ruler span {
   padding: 6px 5px;
@@ -1178,35 +1179,43 @@ input[type='range'] {
   position: relative;
   display: grid;
   grid-template-rows: repeat(16, 32px);
-  min-width: 570px;
+  min-width: max(570px, calc(var(--drum-columns, 16) * 22px));
 }
 .drum-roll-row {
-  display: grid;
-  grid-template-columns: repeat(16, minmax(32px, 1fr));
+  position: relative;
   border-bottom: 1px solid #292d28;
-  background: #141713;
+  background-color: #141713;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(var(--drum-grid-size) - 1px),
+      #292d28 var(--drum-grid-size)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(var(--drum-beat-size) - 1px),
+      #555149 var(--drum-beat-size)
+    );
+  cursor: crosshair;
 }
 .drum-roll-row.selected {
   background: #1e211c;
 }
-.drum-roll-row button {
-  position: relative;
-  border-left: 1px solid #282c27;
-  background: transparent;
+.drum-roll-row:hover {
+  background-color: #1d201b;
 }
-.drum-roll-row button:hover {
-  background: #ffffff0a;
-}
-.drum-roll-row button.beat {
-  border-left-color: #4c4c45;
-}
-.drum-roll-row button.active i {
+.drum-hit {
   position: absolute;
-  inset: 5px 3px;
+  top: 5px;
+  bottom: 5px;
+  min-width: 4px;
   border: 1px solid #ffc389;
   border-radius: 2px;
   background: linear-gradient(90deg, #ef984e, #f5b060);
   box-shadow: 0 0 6px #ed8f4155;
+  pointer-events: none;
 }
 .drum-roll-playhead {
   position: absolute;

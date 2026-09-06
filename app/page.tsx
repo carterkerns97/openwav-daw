@@ -633,6 +633,11 @@ export default function Home() {
   const selectedClip = tracks
     .flatMap((t) => t.clips)
     .find((c) => c.id === selectedClipId);
+  const drumStepSeconds = 60 / bpm / 4;
+  const drumStepCount =
+    selectedClip?.type === 'midi'
+      ? Math.max(1, Math.ceil(selectedClip.duration / drumStepSeconds))
+      : 16;
   const snapshot = useCallback(
     () => ({ tracks, bpm, loopEnabled, loopStart, loopEnd }),
     [tracks, bpm, loopEnabled, loopStart, loopEnd],
@@ -1032,6 +1037,17 @@ export default function Home() {
     await loadDrumSound(soundId);
     void auditionDrum(soundId);
   };
+  const setDrumKit = (pad: number, kit: DrumSound['kit']) => {
+    if (!selectedTrack || selectedTrack.kind !== 'drum') return;
+    const current = DRUM_SOUNDS.find(
+      (sound) => sound.id === selectedTrack.drumMap[pad],
+    );
+    const replacement =
+      DRUM_SOUNDS.find(
+        (sound) => sound.kit === kit && sound.name === current?.name,
+      ) ?? DRUM_SOUNDS.find((sound) => sound.kit === kit);
+    if (replacement) void setDrumSound(pad, replacement.id);
+  };
   const toggleDrumStep = (pad: number, stepIndex: number) => {
     if (
       !selectedTrack ||
@@ -1041,11 +1057,14 @@ export default function Home() {
       return;
     checkpoint();
     const pitch = 36 + pad;
-    const step = selectedClip.duration / 16;
+    const step = drumStepSeconds;
+    const noteStart = Math.min(
+      stepIndex * step,
+      selectedClip.duration - step / 4,
+    );
     const found = selectedClip.notes.find(
       (note) =>
-        note.pitch === pitch &&
-        Math.abs(note.start - stepIndex * step) < step / 3,
+        note.pitch === pitch && Math.abs(note.start - noteStart) < step / 3,
     );
     updateClip(selectedClip.id, {
       notes: found
@@ -1055,7 +1074,7 @@ export default function Home() {
             {
               id: crypto.randomUUID(),
               pitch,
-              start: stepIndex * step,
+              start: noteStart,
               duration: step * 0.78,
               velocity: 0.9,
             },
@@ -2271,36 +2290,66 @@ export default function Home() {
                   </span>
                 </div>
                 <label>
-                  PAD SOUND
+                  KIT
+                  <select
+                    value={
+                      DRUM_SOUNDS.find(
+                        (sound) =>
+                          sound.id === selectedTrack.drumMap[selectedDrumPad],
+                      )?.kit
+                    }
+                    onChange={(event) =>
+                      setDrumKit(
+                        selectedDrumPad,
+                        event.target.value as DrumSound['kit'],
+                      )
+                    }
+                  >
+                    <option value="808">808</option>
+                    <option value="909">909</option>
+                    <option value="505">505</option>
+                  </select>
+                </label>
+                <label>
+                  SOUND
                   <select
                     value={selectedTrack.drumMap[selectedDrumPad]}
                     onChange={(event) =>
                       void setDrumSound(selectedDrumPad, event.target.value)
                     }
                   >
-                    {(['808', '909', '505'] as const).map((kit) => (
-                      <optgroup key={kit} label={`${kit} machine`}>
-                        {DRUM_SOUNDS.filter((sound) => sound.kit === kit).map(
-                          (sound) => (
-                            <option key={sound.id} value={sound.id}>
-                              {sound.name}
-                            </option>
-                          ),
-                        )}
-                      </optgroup>
+                    {DRUM_SOUNDS.filter(
+                      (sound) =>
+                        sound.kit ===
+                        DRUM_SOUNDS.find(
+                          (item) =>
+                            item.id === selectedTrack.drumMap[selectedDrumPad],
+                        )?.kit,
+                    ).map((sound) => (
+                      <option key={sound.id} value={sound.id}>
+                        {sound.name}
+                      </option>
                     ))}
                   </select>
                 </label>
                 <span className="drum-hint">
-                  Click a lane name to preview · click the grid to add/remove
-                  hits
+                  1/16 grid · {drumStepCount} steps follow this clip’s length
                 </span>
               </div>
               <div className="drum-roll-label-head">DRUM RACK</div>
-              <div className="drum-step-ruler">
-                {Array.from({ length: 16 }, (_, step) => (
+              <div
+                className="drum-step-ruler"
+                style={
+                  {
+                    '--drum-columns': drumStepCount,
+                  } as React.CSSProperties
+                }
+              >
+                {Array.from({ length: drumStepCount }, (_, step) => (
                   <span className={step % 4 === 0 ? 'beat' : ''} key={step}>
-                    {step + 1}
+                    {step % 4 === 0
+                      ? `${Math.floor(step / 16) + 1}.${(step % 16) / 4 + 1}`
+                      : step + 1}
                   </span>
                 ))}
               </div>
@@ -2328,7 +2377,14 @@ export default function Home() {
                     );
                   })}
               </div>
-              <div className="drum-roll-grid">
+              <div
+                className="drum-roll-grid"
+                style={
+                  {
+                    '--drum-columns': drumStepCount,
+                  } as React.CSSProperties
+                }
+              >
                 {selectedTrack.drumMap
                   .map((_, pad) => pad)
                   .reverse()
@@ -2336,29 +2392,40 @@ export default function Home() {
                     <div
                       className={`drum-roll-row ${selectedDrumPad === pad ? 'selected' : ''}`}
                       key={pad}
+                      style={
+                        {
+                          '--drum-grid-size': `${(drumStepSeconds / selectedClip.duration) * 100}%`,
+                          '--drum-beat-size': `${((drumStepSeconds * 4) / selectedClip.duration) * 100}%`,
+                        } as React.CSSProperties
+                      }
+                      onPointerDown={(event) => {
+                        if (event.button !== 0) return;
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const time =
+                          ((event.clientX - rect.left) / rect.width) *
+                          selectedClip.duration;
+                        const stepIndex = Math.min(
+                          drumStepCount - 1,
+                          Math.max(0, Math.floor(time / drumStepSeconds)),
+                        );
+                        setSelectedDrumPad(pad);
+                        toggleDrumStep(pad, stepIndex);
+                      }}
                     >
-                      {Array.from({ length: 16 }, (_, stepIndex) => {
-                        const stepLength = selectedClip.duration / 16;
-                        const note = selectedClip.notes.find(
-                          (item) =>
-                            item.pitch === 36 + pad &&
-                            Math.abs(item.start - stepIndex * stepLength) <
-                              stepLength / 3,
-                        );
-                        return (
-                          <button
-                            key={stepIndex}
-                            className={`${note ? 'active' : ''} ${stepIndex % 4 === 0 ? 'beat' : ''}`}
-                            onClick={() => {
-                              setSelectedDrumPad(pad);
-                              toggleDrumStep(pad, stepIndex);
+                      {selectedClip.notes
+                        .filter((note) => note.pitch === 36 + pad)
+                        .map((note) => (
+                          <i
+                            className="drum-hit"
+                            key={note.id}
+                            style={{
+                              left: `${(note.start / selectedClip.duration) * 100}%`,
+                              width: `${Math.max(0.5, (note.duration / selectedClip.duration) * 100)}%`,
+                              opacity: note.velocity,
                             }}
-                            aria-label={`${DRUM_SOUNDS.find((sound) => sound.id === selectedTrack.drumMap[pad])?.name}, step ${stepIndex + 1}`}
-                          >
-                            {note && <i style={{ opacity: note.velocity }} />}
-                          </button>
-                        );
-                      })}
+                          />
+                        ))}
                     </div>
                   ))}
                 {position >= selectedClip.start &&
