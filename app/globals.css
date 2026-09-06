@@ -1033,6 +1033,191 @@ input[type='range'] {
   color: #656960;
   font-size: 7px;
 }
+.drum-midi-editor {
+  min-width: 760px;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(570px, 1fr);
+  grid-template-rows: 50px 22px minmax(0, 1fr);
+  overflow: auto;
+  background: #151714;
+}
+.drum-midi-toolbar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #3a3934;
+  background: #22231f;
+}
+.drum-midi-toolbar > div {
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f2a35c;
+}
+.drum-midi-toolbar > div > span {
+  display: grid;
+}
+.drum-midi-toolbar small,
+.drum-midi-toolbar label {
+  color: #74786f;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.drum-midi-toolbar strong {
+  color: #e7e8e1;
+  font-size: 10px;
+}
+.drum-midi-toolbar strong i {
+  color: #8d8f87;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+}
+.drum-midi-toolbar label {
+  display: grid;
+  grid-template-columns: auto 180px;
+  align-items: center;
+  gap: 7px;
+}
+.drum-midi-toolbar select {
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid #464740;
+  border-radius: 3px;
+  background: #141613;
+  color: #d9dbd4;
+  font-size: 9px;
+}
+.drum-hint {
+  margin-left: auto;
+  color: #696d65;
+  font-size: 8px;
+}
+.drum-roll-label-head,
+.drum-step-ruler {
+  position: sticky;
+  top: 50px;
+  z-index: 7;
+  border-bottom: 1px solid #44443e;
+  background: #1b1d19;
+}
+.drum-roll-label-head {
+  left: 0;
+  padding: 6px 10px;
+  border-right: 1px solid #42423d;
+  color: #72766e;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.drum-step-ruler {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(32px, 1fr));
+}
+.drum-step-ruler span {
+  padding: 6px 5px;
+  border-left: 1px solid #2c302b;
+  color: #646961;
+  font-size: 7px;
+}
+.drum-step-ruler span.beat {
+  border-left-color: #686158;
+  color: #b2a58f;
+}
+.drum-lane-labels {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: repeat(16, 32px);
+  background: #181a17;
+}
+.drum-lane-labels button {
+  display: grid;
+  grid-template-columns: 25px 1fr 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-right: 1px solid #41423c;
+  border-bottom: 1px solid #2d302c;
+  background: #1d201c;
+  color: #b9bcb4;
+  text-align: left;
+}
+.drum-lane-labels button:hover,
+.drum-lane-labels button.selected {
+  background: #3a3025;
+  color: #fff;
+}
+.drum-lane-labels button > span {
+  color: #676c64;
+  font-family: monospace;
+  font-size: 7px;
+}
+.drum-lane-labels b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+}
+.drum-lane-labels small {
+  color: #a77951;
+  font-size: 7px;
+  text-align: right;
+}
+.drum-roll-grid {
+  position: relative;
+  display: grid;
+  grid-template-rows: repeat(16, 32px);
+  min-width: 570px;
+}
+.drum-roll-row {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(32px, 1fr));
+  border-bottom: 1px solid #292d28;
+  background: #141713;
+}
+.drum-roll-row.selected {
+  background: #1e211c;
+}
+.drum-roll-row button {
+  position: relative;
+  border-left: 1px solid #282c27;
+  background: transparent;
+}
+.drum-roll-row button:hover {
+  background: #ffffff0a;
+}
+.drum-roll-row button.beat {
+  border-left-color: #4c4c45;
+}
+.drum-roll-row button.active i {
+  position: absolute;
+  inset: 5px 3px;
+  border: 1px solid #ffc389;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ef984e, #f5b060);
+  box-shadow: 0 0 6px #ed8f4155;
+}
+.drum-roll-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 5px #ffffff88;
+  pointer-events: none;
+}
 .rack-empty {
   min-width: 280px;
   flex: 1;
