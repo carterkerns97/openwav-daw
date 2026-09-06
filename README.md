@@ -6,8 +6,11 @@ Openwave is a lightweight, open-source multitrack audio workspace that runs enti
 
 - Drag-and-drop or file-picker audio import
 - Multitrack, synchronized playback and timeline seeking
+- Movable clips with edge trimming, splitting, duplication, and deletion
 - Microphone recording into an armed track
-- Per-track volume, pan, mute, solo, and low-pass filtering
+- Simple oscillator synth with an editable 24-key piano roll
+- Drag-and-drop effects rack with EQ, compression, reverb, delay, chorus, and saturation
+- Per-track volume, pan, mute, and solo controls
 - Master volume and offline WAV export
 - Responsive desktop and tablet workspace
 
@@ -24,7 +27,7 @@ Open `http://localhost:3000`, import a few audio files, and press Space to play 
 
 ## Current limitations
 
-This is an intentionally small first prototype. A track holds one clip, sessions are not yet persisted between reloads, BPM is informational, and browser audio support varies by file codec. Plugin hosting requires a future native engine.
+This is still an intentionally small prototype. Sessions are not yet persisted between reloads, BPM does not yet change clip timing, and browser audio support varies by file codec. Plugin hosting requires a future native engine.
 
 ## License
 
