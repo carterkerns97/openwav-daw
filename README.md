@@ -12,6 +12,10 @@ Openwave is a lightweight, open-source multitrack audio workspace that runs enti
 - Resizable/maximizable piano-roll editor with draggable note lengths
 - Optional 1/16, 1/8, 1/4, and 1/2-note snapping
 - Major/minor key constraints with out-of-key lanes disabled
+- Horizontal and vertical MIDI dragging, plus Alt-drag duplication
+- Undo/redo history with standard Ctrl/Cmd keyboard shortcuts
+- Beat-snapped arrangement loop brace and looping playback
+- Tempo-aware MIDI timing and a toggleable accented metronome
 - Drag-and-drop effects rack with EQ, compression, reverb, delay, chorus, and saturation
 - Per-track volume, pan, mute, and solo controls
 - Master volume and offline WAV export

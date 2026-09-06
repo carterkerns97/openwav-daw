@@ -18,12 +18,15 @@ import {
   Play,
   Plus,
   Radio,
+  Redo2,
+  Repeat2,
   RotateCcw,
   Save,
   Scissors,
   Sparkles,
   Square,
   Trash2,
+  Undo2,
   Volume2,
   Waves,
   X,
@@ -139,21 +142,22 @@ function makeTrack(index: number, kind: Track['kind'] = 'audio'): Track {
     waveform: 'sawtooth',
   };
 }
-function defaultMidiClip(start: number): Clip {
+function defaultMidiClip(start: number, bpm: number): Clip {
   const root = 60;
+  const beat = 60 / bpm;
   return {
     id: crypto.randomUUID(),
     type: 'midi',
     name: 'New MIDI clip',
     start,
-    duration: 8,
+    duration: 16 * beat,
     offset: 0,
     peaks: [],
-    notes: [0, 2, 4, 6].map((step, i) => ({
+    notes: [0, 4, 8, 12].map((step, i) => ({
       id: crypto.randomUUID(),
       pitch: root + [0, 4, 7, 11][i],
-      start: step,
-      duration: 1.5,
+      start: step * beat,
+      duration: 1.5 * beat,
       velocity: 0.75,
     })),
   };
@@ -322,6 +326,10 @@ export default function Home() {
   const [selectedClipId, setSelectedClipId] = useState('');
   const [position, setPosition] = useState(0);
   const [bpm, setBpm] = useState(120);
+  const [metronome, setMetronome] = useState(false);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const [loopStart, setLoopStart] = useState(0);
+  const [loopEnd, setLoopEnd] = useState(4);
   const [playing, setPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
   const [master, setMaster] = useState(0.85);
@@ -356,24 +364,68 @@ export default function Home() {
   const noteGesture = useRef<{
     noteId: string;
     startX: number;
+    startY: number;
     originalStart: number;
     originalDuration: number;
+    originalPitch: number;
     mode: 'move' | 'resize';
   } | null>(null);
+  const loopGesture = useRef<{
+    startX: number;
+    originalStart: number;
+    originalEnd: number;
+    mode: 'move' | 'left' | 'right';
+  } | null>(null);
+  const history = useRef<{
+    undo: Array<{ tracks: Track[]; bpm: number; loopEnabled: boolean; loopStart: number; loopEnd: number }>;
+    redo: Array<{ tracks: Track[]; bpm: number; loopEnabled: boolean; loopStart: number; loopEnd: number }>;
+  }>({ undo: [], redo: [] });
   const resizeStart = useRef<{ y: number; height: number } | null>(null);
   const duration = useMemo(
     () =>
       Math.max(
         60,
+        loopEnd + 4,
         ...tracks.flatMap((t) => t.clips.map((c) => c.start + c.duration + 4)),
       ),
-    [tracks],
+    [tracks, loopEnd],
   );
   const selectedTrack =
     tracks.find((t) => t.id === selectedTrackId) ?? tracks[0];
   const selectedClip = tracks
     .flatMap((t) => t.clips)
     .find((c) => c.id === selectedClipId);
+  const snapshot = useCallback(
+    () => ({ tracks, bpm, loopEnabled, loopStart, loopEnd }),
+    [tracks, bpm, loopEnabled, loopStart, loopEnd],
+  );
+  const checkpoint = useCallback(() => {
+    history.current.undo.push(snapshot());
+    if (history.current.undo.length > 80) history.current.undo.shift();
+    history.current.redo = [];
+  }, [snapshot]);
+  const restore = (value: ReturnType<typeof snapshot>) => {
+    stop();
+    setTracks(value.tracks);
+    setBpm(value.bpm);
+    setLoopEnabled(value.loopEnabled);
+    setLoopStart(value.loopStart);
+    setLoopEnd(value.loopEnd);
+  };
+  const undo = useCallback(() => {
+    const previous = history.current.undo.pop();
+    if (!previous) return;
+    history.current.redo.push(snapshot());
+    restore(previous);
+    setStatus('Undo');
+  }, [snapshot]);
+  const redo = useCallback(() => {
+    const next = history.current.redo.pop();
+    if (!next) return;
+    history.current.undo.push(snapshot());
+    restore(next);
+    setStatus('Redo');
+  }, [snapshot]);
   const audioContext = useCallback(
     () => contextRef.current ?? (contextRef.current = new AudioContext()),
     [],
@@ -392,6 +444,7 @@ export default function Home() {
   );
   const scaleNotes =
     keyScale === 'major' ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+  const snapSeconds = noteSnap * (60 / bpm);
   const inKey = useCallback(
     (pitch: number) => scaleNotes.includes((pitch - keyRoot + 120) % 12),
     [keyRoot, scaleNotes],
@@ -408,6 +461,33 @@ export default function Home() {
     setPlaying(false);
     if (reset) setPosition(0);
   }, []);
+  const changeTempo = (nextValue: number) => {
+    const next = Math.max(40, Math.min(240, Math.round(nextValue)));
+    if (!Number.isFinite(next) || next === bpm) return;
+    checkpoint();
+    const ratio = bpm / next;
+    setTracks((old) =>
+      old.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) =>
+          clip.type === 'midi'
+            ? {
+                ...clip,
+                duration: clip.duration * ratio,
+                notes: clip.notes.map((note) => ({
+                  ...note,
+                  start: note.start * ratio,
+                  duration: note.duration * ratio,
+                })),
+              }
+            : clip,
+        ),
+      })),
+    );
+    setBpm(next);
+    setStatus(`Tempo changed to ${next} BPM`);
+    if (playing) setTimeout(() => void playAtRef.current(position), 0);
+  };
   const seekFromPointer = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
@@ -415,6 +495,20 @@ export default function Home() {
     setPosition(
       Math.max(0, Math.min(duration, (event.clientX - rect.left) / PX)),
     );
+  };
+  const startLoopGesture = (
+    event: ReactPointerEvent,
+    mode: 'move' | 'left' | 'right',
+  ) => {
+    event.stopPropagation();
+    event.preventDefault();
+    checkpoint();
+    loopGesture.current = {
+      startX: event.clientX,
+      originalStart: loopStart,
+      originalEnd: loopEnd,
+      mode,
+    };
   };
   const buildGraph = useCallback(
     (
@@ -482,26 +576,51 @@ export default function Home() {
     },
     [tracks],
   );
-  const play = useCallback(async () => {
-    const ctx = audioContext();
-    await ctx.resume();
-    stop();
-    const masterNode = ctx.createGain();
-    masterNode.gain.value = master;
-    masterNode.connect(ctx.destination);
-    buildGraph(ctx, position, masterNode);
-    startedAt.current = ctx.currentTime - position;
-    setPlaying(true);
-    const tick = () => {
-      const next = ctx.currentTime - startedAt.current;
-      if (next >= duration) stop(true);
-      else {
-        setPosition(next);
-        raf.current = requestAnimationFrame(tick);
+  const playAtRef = useRef<(at: number) => Promise<void>>(async () => {});
+  const playAt = useCallback(
+    async (at: number) => {
+      const ctx = audioContext();
+      await ctx.resume();
+      stop();
+      const masterNode = ctx.createGain();
+      masterNode.gain.value = master;
+      masterNode.connect(ctx.destination);
+      buildGraph(ctx, at, masterNode);
+      if (metronome) {
+        const beat = 60 / bpm;
+        for (let time = Math.ceil(at / beat) * beat; time < duration; time += beat) {
+          const osc = ctx.createOscillator(),
+            click = ctx.createGain(),
+            starts = ctx.currentTime + time - at;
+          osc.frequency.value = Math.round(time / beat) % 4 === 0 ? 1320 : 920;
+          click.gain.setValueAtTime(0.0001, starts);
+          click.gain.exponentialRampToValueAtTime(0.16, starts + 0.002);
+          click.gain.exponentialRampToValueAtTime(0.0001, starts + 0.045);
+          osc.connect(click).connect(masterNode);
+          osc.start(starts);
+          osc.stop(starts + 0.05);
+          sources.current.push(osc);
+        }
       }
-    };
-    raf.current = requestAnimationFrame(tick);
-  }, [audioContext, buildGraph, duration, master, position, stop]);
+      startedAt.current = ctx.currentTime - at;
+      setPosition(at);
+      setPlaying(true);
+      const tick = () => {
+        const next = ctx.currentTime - startedAt.current;
+        if (loopEnabled && next >= loopEnd) {
+          void playAtRef.current(loopStart);
+        } else if (next >= duration) stop(true);
+        else {
+          setPosition(next);
+          raf.current = requestAnimationFrame(tick);
+        }
+      };
+      raf.current = requestAnimationFrame(tick);
+    },
+    [audioContext, bpm, buildGraph, duration, loopEnabled, loopEnd, loopStart, master, metronome, stop],
+  );
+  playAtRef.current = playAt;
+  const play = useCallback(() => playAt(position), [playAt, position]);
 
   const importFiles = useCallback(
     async (list: FileList | File[]) => {
@@ -520,6 +639,7 @@ export default function Home() {
               buffer: await ctx.decodeAudioData(await file.arrayBuffer()),
             })),
           );
+        checkpoint();
         setTracks((current) => {
           const next = current.map((t) => ({ ...t, clips: [...t.clips] }));
           decoded.forEach(({ file, buffer }, n) => {
@@ -559,11 +679,12 @@ export default function Home() {
         setStatus('This browser could not decode that audio file');
       }
     },
-    [audioContext, position, selectedTrackId],
+    [audioContext, checkpoint, position, selectedTrackId],
   );
 
   const addSynth = () => {
-    const clip = defaultMidiClip(position),
+    checkpoint();
+    const clip = defaultMidiClip(position, bpm),
       targetId = selectedTrack?.id;
     if (targetId) {
       setTracks((old) =>
@@ -613,6 +734,7 @@ export default function Home() {
             peaks: getPeaks(buffer),
             notes: [],
           };
+        checkpoint();
         setTracks((current) => {
           let target = current.find((t) => t.armed && t.kind === 'audio');
           if (!target) target = current.find((t) => t.kind === 'audio');
@@ -631,13 +753,14 @@ export default function Home() {
     } catch {
       setStatus('Microphone permission is needed to record');
     }
-  }, [audioContext, position, recording]);
+  }, [audioContext, checkpoint, position, recording]);
 
   const splitClip = useCallback(() => {
     if (!selectedClip) return;
     const cut = position - selectedClip.start;
     if (cut <= 0.05 || cut >= selectedClip.duration - 0.05)
       return setStatus('Place the playhead inside the selected clip to split');
+    checkpoint();
     setTracks((old) =>
       old.map((t) => ({
         ...t,
@@ -659,9 +782,10 @@ export default function Home() {
       })),
     );
     setStatus(`Split clip at ${clock(position)}`);
-  }, [position, selectedClip]);
+  }, [checkpoint, position, selectedClip]);
   const deleteClip = useCallback(() => {
     if (!selectedClipId) return;
+    checkpoint();
     setTracks((old) =>
       old.map((t) => ({
         ...t,
@@ -670,9 +794,10 @@ export default function Home() {
     );
     setSelectedClipId('');
     setStatus('Clip deleted');
-  }, [selectedClipId]);
+  }, [checkpoint, selectedClipId]);
   const duplicateClip = () => {
     if (!selectedClip) return;
+    checkpoint();
     const clone = {
       ...selectedClip,
       id: crypto.randomUUID(),
@@ -699,6 +824,7 @@ export default function Home() {
     event.preventDefault();
     setSelectedTrackId(trackId);
     setSelectedClipId(clip.id);
+    checkpoint();
     gesture.current = {
       clipId: clip.id,
       trackId,
@@ -803,7 +929,10 @@ export default function Home() {
           ? editor.clientWidth / selectedClip.duration
           : 90,
         delta = (event.clientX - g.startX) / pixelsPerBeat,
-        snapped = Math.round(delta / noteSnap) * noteSnap;
+        snapped = Math.round(delta / snapSeconds) * snapSeconds,
+        rowDelta = Math.round((event.clientY - g.startY) / 22),
+        candidatePitch = Math.max(0, Math.min(127, g.originalPitch - rowDelta)),
+        nextPitch = inKey(candidatePitch) ? candidatePitch : g.originalPitch;
       const notes = selectedClip.notes.map((note) =>
         note.id !== g.noteId
           ? note
@@ -811,7 +940,7 @@ export default function Home() {
             ? {
                 ...note,
                 duration: Math.max(
-                  noteSnap,
+                  snapSeconds,
                   Math.min(
                     selectedClip.duration - note.start,
                     g.originalDuration + snapped,
@@ -819,8 +948,9 @@ export default function Home() {
                 ),
               }
             : {
-                ...note,
-                start: Math.max(
+              ...note,
+              pitch: nextPitch,
+              start: Math.max(
                   0,
                   Math.min(
                     selectedClip.duration - note.duration,
@@ -840,7 +970,35 @@ export default function Home() {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
-  }, [noteSnap, selectedClip, updateClip]);
+  }, [inKey, selectedClip, snapSeconds, updateClip]);
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const g = loopGesture.current;
+      if (!g) return;
+      const beat = 60 / bpm,
+        delta = Math.round(((event.clientX - g.startX) / PX) / beat) * beat,
+        length = g.originalEnd - g.originalStart;
+      if (g.mode === 'move') {
+        const start = Math.max(0, g.originalStart + delta);
+        setLoopStart(start);
+        setLoopEnd(start + length);
+      } else if (g.mode === 'left') {
+        setLoopStart(Math.max(0, Math.min(g.originalEnd - beat, g.originalStart + delta)));
+      } else {
+        setLoopEnd(Math.max(g.originalStart + beat, g.originalEnd + delta));
+      }
+    };
+    const up = () => {
+      loopGesture.current = null;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [bpm]);
 
   useEffect(() => {
     if (bottomMode !== 'piano' || !selectedClipId) return;
@@ -869,6 +1027,7 @@ export default function Home() {
   }, []);
 
   const addEffect = (trackId: string, type: EffectType) => {
+    checkpoint();
     setTracks((old) =>
       old.map((t) =>
         t.id === trackId
@@ -931,9 +1090,35 @@ export default function Home() {
     setStatus('Mix exported as openwave-mix.wav');
   }, [buildGraph, master, tracks]);
 
+  const startNoteGesture = (
+    event: ReactPointerEvent,
+    note: Note,
+    mode: 'move' | 'resize',
+  ) => {
+    event.stopPropagation();
+    checkpoint();
+    let noteId = note.id;
+    if (event.altKey && mode === 'move' && selectedClip) {
+      noteId = crypto.randomUUID();
+      const copy = { ...note, id: noteId };
+      updateClip(selectedClip.id, { notes: [...selectedClip.notes, copy] });
+      setStatus('Note copied — keep dragging to place it');
+    }
+    noteGesture.current = {
+      noteId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originalStart: note.start,
+      originalDuration: note.duration,
+      originalPitch: note.pitch,
+      mode,
+    };
+  };
+
   const toggleNote = (pitch: number, noteStart: number) => {
     if (!selectedClip || selectedClip.type !== 'midi' || !inKey(pitch)) return;
-    const snappedStart = Math.floor(noteStart / noteSnap) * noteSnap,
+    checkpoint();
+    const snappedStart = Math.floor(noteStart / snapSeconds) * snapSeconds,
       existing = selectedClip.notes.find(
         (n) =>
           n.pitch === pitch &&
@@ -948,7 +1133,7 @@ export default function Home() {
               id: crypto.randomUUID(),
               pitch,
               start: snappedStart,
-              duration: noteSnap,
+              duration: snapSeconds,
               velocity: 0.75,
             },
           ];
@@ -957,6 +1142,17 @@ export default function Home() {
   useEffect(() => () => stop(), [stop]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (
         e.code === 'Space' &&
         !(e.target instanceof HTMLInputElement) &&
@@ -973,7 +1169,7 @@ export default function Home() {
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [deleteClip, play, playing, stop]);
+  }, [deleteClip, play, playing, redo, stop, undo]);
   const bars = Array.from({ length: Math.ceil(duration / 2) }, (_, n) => n + 1);
 
   return (
@@ -1027,6 +1223,12 @@ export default function Home() {
       </header>
       <section className="transport">
         <div className="transport-left">
+          <button className="icon-button" title="Undo (Ctrl+Z)" onClick={undo}>
+            <Undo2 size={15} />
+          </button>
+          <button className="icon-button" title="Redo (Ctrl+Shift+Z)" onClick={redo}>
+            <Redo2 size={15} />
+          </button>
           <button
             className="icon-button"
             title="Return to start"
@@ -1052,6 +1254,29 @@ export default function Home() {
           >
             <Circle size={15} fill="currentColor" />
           </button>
+          <button
+            className={`icon-button transport-toggle ${loopEnabled ? 'active' : ''}`}
+            title="Toggle arrangement loop"
+            onClick={() => {
+              checkpoint();
+              setLoopEnabled((value) => !value);
+              if (playing)
+                setTimeout(() => void playAtRef.current(position), 0);
+            }}
+          >
+            <Repeat2 size={16} />
+          </button>
+          <button
+            className={`icon-button transport-toggle ${metronome ? 'active' : ''}`}
+            title="Toggle metronome"
+            onClick={() => {
+              setMetronome((value) => !value);
+              if (playing)
+                setTimeout(() => void playAtRef.current(position), 0);
+            }}
+          >
+            <span className="metronome-icon">♩</span>
+          </button>
           <output className="time-readout">{clock(position)}</output>
         </div>
         <div className="tempo-control">
@@ -1062,7 +1287,7 @@ export default function Home() {
             min="40"
             max="240"
             value={bpm}
-            onChange={(e) => setBpm(Number(e.target.value))}
+            onChange={(e) => changeTempo(Number(e.target.value))}
           />
           <b>BPM</b>
         </div>
@@ -1153,6 +1378,27 @@ export default function Home() {
                   {bar}
                 </span>
               ))}
+              <div
+                className={`loop-brace ${loopEnabled ? 'enabled' : ''}`}
+                style={{
+                  left: loopStart * PX,
+                  width: Math.max(24, (loopEnd - loopStart) * PX),
+                }}
+                onPointerDown={(e) => startLoopGesture(e, 'move')}
+                title="Drag to move the loop"
+              >
+                <button
+                  className="loop-handle left"
+                  aria-label="Resize loop start"
+                  onPointerDown={(e) => startLoopGesture(e, 'left')}
+                />
+                <span>LOOP</span>
+                <button
+                  className="loop-handle right"
+                  aria-label="Resize loop end"
+                  onPointerDown={(e) => startLoopGesture(e, 'right')}
+                />
+              </div>
               <div className="ruler-playhead" style={{ left: position * PX }} />
             </div>
           </div>
@@ -1612,7 +1858,7 @@ export default function Home() {
                     key={pitch}
                     style={
                       {
-                        '--snap-size': `${(noteSnap / selectedClip.duration) * 100}%`,
+                        '--snap-size': `${(snapSeconds / selectedClip.duration) * 100}%`,
                       } as React.CSSProperties
                     }
                     onPointerDown={(e) => {
@@ -1635,18 +1881,12 @@ export default function Home() {
                             left: `${(note.start / selectedClip.duration) * 100}%`,
                             width: `${(note.duration / selectedClip.duration) * 100}%`,
                           }}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            noteGesture.current = {
-                              noteId: note.id,
-                              startX: e.clientX,
-                              originalStart: note.start,
-                              originalDuration: note.duration,
-                              mode: 'move',
-                            };
-                          }}
+                          onPointerDown={(e) =>
+                            startNoteGesture(e, note, 'move')
+                          }
                           onDoubleClick={(e) => {
                             e.stopPropagation();
+                            checkpoint();
                             updateClip(selectedClip.id, {
                               notes: selectedClip.notes.filter(
                                 (n) => n.id !== note.id,
@@ -1656,16 +1896,9 @@ export default function Home() {
                         >
                           <span>{noteName(note.pitch)}</span>
                           <i
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              noteGesture.current = {
-                                noteId: note.id,
-                                startX: e.clientX,
-                                originalStart: note.start,
-                                originalDuration: note.duration,
-                                mode: 'resize',
-                              };
-                            }}
+                            onPointerDown={(e) =>
+                              startNoteGesture(e, note, 'resize')
+                            }
                           />
                         </button>
                       ))}
@@ -1682,8 +1915,8 @@ export default function Home() {
                   )}
               </div>
               <div className="piano-help">
-                Click to add · drag notes to move · drag right edge to resize ·
-                double-click to delete
+                Click to add · drag in any direction · Alt-drag to copy · drag
+                right edge to resize · double-click to delete
               </div>
             </div>
           ) : null}

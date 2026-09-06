@@ -168,6 +168,16 @@ input[type='range'] {
   background: var(--danger);
   color: white;
 }
+.transport-toggle.active {
+  color: var(--accent);
+  background: #26301e;
+  box-shadow: inset 0 0 0 1px #536d36;
+}
+.metronome-icon {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
 @keyframes pulse {
   50% {
     opacity: 0.55;
@@ -367,6 +377,53 @@ input[type='range'] {
     transparent 63px,
     #292e32 64px
   );
+}
+.loop-brace {
+  position: absolute;
+  top: 2px;
+  height: 9px;
+  z-index: 6;
+  min-width: 24px;
+  border: 1px solid #586168;
+  border-radius: 2px;
+  background: #78838a88;
+  color: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+.loop-brace.enabled {
+  border-color: var(--accent);
+  background: #b8f25c66;
+  color: #b8f25c;
+  box-shadow: 0 0 7px #b8f25c33;
+}
+.loop-brace:active {
+  cursor: grabbing;
+}
+.loop-brace > span {
+  position: absolute;
+  top: 10px;
+  left: 4px;
+  font-size: 6px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.loop-handle {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 7px;
+  background: transparent;
+  cursor: ew-resize;
+}
+.loop-handle.left {
+  left: -3px;
+}
+.loop-handle.right {
+  right: -3px;
+}
+.loop-handle:hover {
+  background: #fff8;
 }
 .ruler > span {
   position: absolute;
