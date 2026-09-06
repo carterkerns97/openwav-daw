@@ -94,6 +94,23 @@ input[type='range'] {
   align-items: center;
   gap: 7px;
 }
+.project-name input {
+  width: 190px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #aeb6ba;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+.project-name input:hover,
+.project-name input:focus {
+  border-color: #363d42;
+  background: #101315;
+  outline: none;
+}
 .saved-dot {
   width: 6px;
   height: 6px;
@@ -192,7 +209,8 @@ input[type='range'] {
   font-variant-numeric: tabular-nums;
 }
 .tempo-control,
-.master-control {
+.master-control,
+.zoom-control {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -215,6 +233,21 @@ input[type='range'] {
 }
 .master-control input {
   width: 100px;
+}
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #667077;
+}
+.zoom-control input {
+  width: 72px;
+}
+.zoom-control b {
+  width: 30px;
+  color: #8b959a;
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
 }
 .workspace {
   min-height: 0;
@@ -376,14 +409,15 @@ input[type='range'] {
   color: var(--accent);
 }
 .ruler {
+  --timeline-second: 64px;
   position: relative;
   flex: 0 0 auto;
   min-width: 100%;
   background-image: repeating-linear-gradient(
     90deg,
     transparent 0,
-    transparent 63px,
-    #292e32 64px
+    transparent calc(var(--timeline-second) - 1px),
+    #292e32 var(--timeline-second)
   );
 }
 .loop-brace {
@@ -565,14 +599,15 @@ input[type='range'] {
   width: 100%;
 }
 .track-lane {
+  --timeline-second: 64px;
   flex: 0 0 auto;
   position: relative;
   overflow: hidden;
   background-image: repeating-linear-gradient(
     90deg,
     transparent 0,
-    transparent 63px,
-    #202428 64px
+    transparent calc(var(--timeline-second) - 1px),
+    #202428 var(--timeline-second)
   );
 }
 .track-lane:after {
