@@ -31,6 +31,8 @@ import {
   Waves,
   X,
   Zap,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import {
   ChangeEvent,
@@ -568,6 +570,8 @@ export default function Home() {
   const [keyRoot, setKeyRoot] = useState(0);
   const [keyScale, setKeyScale] = useState<'major' | 'minor'>('major');
   const [selectedDrumPad, setSelectedDrumPad] = useState(0);
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const [projectName, setProjectName] = useState('Untitled session');
   const contextRef = useRef<AudioContext | null>(null),
     drumBuffers = useRef<Map<string, AudioBuffer>>(new Map()),
     sources = useRef<AudioScheduledSourceNode[]>([]),
@@ -585,6 +589,7 @@ export default function Home() {
     originalStart: number;
     originalDuration: number;
     originalOffset: number;
+    originalNotes: Note[];
     mode: 'move' | 'left' | 'right';
   } | null>(null);
   const noteGesture = useRef<{
@@ -638,6 +643,7 @@ export default function Home() {
     selectedClip?.type === 'midi'
       ? Math.max(1, Math.ceil(selectedClip.duration / drumStepSeconds))
       : 16;
+  const pixelsPerSecond = PX * timelineZoom;
   const snapshot = useCallback(
     () => ({ tracks, bpm, loopEnabled, loopStart, loopEnd }),
     [tracks, bpm, loopEnabled, loopStart, loopEnd],
@@ -766,7 +772,10 @@ export default function Home() {
     const rect = event.currentTarget.getBoundingClientRect();
     stop();
     setPosition(
-      Math.max(0, Math.min(duration, (event.clientX - rect.left) / PX)),
+      Math.max(
+        0,
+        Math.min(duration, (event.clientX - rect.left) / pixelsPerSecond),
+      ),
     );
   };
   const startLoopGesture = (
@@ -988,7 +997,7 @@ export default function Home() {
   const addSynth = () => {
     checkpoint();
     const clip = defaultMidiClip(position, bpm),
-      targetId = selectedTrack?.id;
+      targetId = selectedTrack?.kind === 'synth' ? selectedTrack.id : undefined;
     if (targetId) {
       setTracks((old) =>
         old.map((t) =>
@@ -1025,6 +1034,73 @@ export default function Home() {
     setStatus(
       'Drum Rack ready — hit pads, choose sounds, and program the 16-step pattern',
     );
+  };
+  const addDrumClip = (trackId: string) => {
+    checkpoint();
+    const clip = defaultDrumClip(position, bpm);
+    setTracks((old) =>
+      old.map((track) =>
+        track.id === trackId
+          ? { ...track, clips: [...track.clips, clip] }
+          : track,
+      ),
+    );
+    setSelectedTrackId(trackId);
+    setSelectedClipId(clip.id);
+    setBottomMode('drums');
+    setStatus('New drum clip added');
+  };
+  const addAudioTrack = () => {
+    checkpoint();
+    const track = makeTrack(tracks.length, 'audio');
+    track.armed = false;
+    setTracks((old) => [...old, track]);
+    setSelectedTrackId(track.id);
+    setStatus('Audio track added');
+  };
+  const duplicateTrack = (trackId: string) => {
+    const source = tracks.find((track) => track.id === trackId);
+    if (!source) return;
+    checkpoint();
+    const clone: Track = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: `${source.name} copy`,
+      armed: false,
+      effects: source.effects.map((effect) => ({
+        ...effect,
+        id: crypto.randomUUID(),
+      })),
+      clips: source.clips.map((clip) => ({
+        ...clip,
+        id: crypto.randomUUID(),
+        notes: clip.notes.map((note) => ({
+          ...note,
+          id: crypto.randomUUID(),
+        })),
+      })),
+      drumMap: [...source.drumMap],
+    };
+    setTracks((old) => {
+      const index = old.findIndex((track) => track.id === trackId);
+      const next = [...old];
+      next.splice(index + 1, 0, clone);
+      return next;
+    });
+    setSelectedTrackId(clone.id);
+    setSelectedClipId(clone.clips[0]?.id ?? '');
+    setStatus('Track duplicated');
+  };
+  const deleteTrack = (trackId: string) => {
+    if (tracks.length <= 1)
+      return setStatus('A session needs at least one track');
+    checkpoint();
+    const index = tracks.findIndex((track) => track.id === trackId);
+    const nextSelection = tracks[index - 1] ?? tracks[index + 1];
+    setTracks((old) => old.filter((track) => track.id !== trackId));
+    setSelectedTrackId(nextSelection?.id ?? '');
+    setSelectedClipId('');
+    setStatus('Track deleted');
   };
   const setDrumSound = async (pad: number, soundId: string) => {
     if (!selectedTrack || selectedTrack.kind !== 'drum') return;
@@ -1113,7 +1189,12 @@ export default function Home() {
         setTracks((current) => {
           let target = current.find((t) => t.armed && t.kind === 'audio');
           if (!target) target = current.find((t) => t.kind === 'audio');
-          return current.map((t) =>
+          const withTarget = target
+            ? current
+            : [...current, (target = makeTrack(current.length, 'audio'))];
+          const targetId = target.id;
+          setTimeout(() => setSelectedTrackId(targetId), 0);
+          return withTarget.map((t) =>
             t.id === target?.id ? { ...t, clips: [...t.clips, clip] } : t,
           );
         });
@@ -1139,21 +1220,50 @@ export default function Home() {
     setTracks((old) =>
       old.map((t) => ({
         ...t,
-        clips: t.clips.flatMap((c) =>
-          c.id !== selectedClip.id
-            ? [c]
-            : [
-                { ...c, duration: cut },
-                {
-                  ...c,
-                  id: crypto.randomUUID(),
-                  name: `${c.name} (2)`,
-                  start: position,
-                  offset: c.offset + cut,
-                  duration: c.duration - cut,
-                },
-              ],
-        ),
+        clips: t.clips.flatMap((c) => {
+          if (c.id !== selectedClip.id) return [c];
+          if (c.type === 'midi') {
+            const leftNotes = c.notes
+              .filter((note) => note.start < cut)
+              .map((note) => ({
+                ...note,
+                duration: Math.min(note.duration, cut - note.start),
+              }));
+            const rightNotes = c.notes
+              .filter((note) => note.start + note.duration > cut)
+              .map((note) => ({
+                ...note,
+                id: crypto.randomUUID(),
+                start: Math.max(0, note.start - cut),
+                duration:
+                  note.start < cut
+                    ? note.start + note.duration - cut
+                    : note.duration,
+              }));
+            return [
+              { ...c, duration: cut, notes: leftNotes },
+              {
+                ...c,
+                id: crypto.randomUUID(),
+                name: `${c.name} (2)`,
+                start: position,
+                duration: c.duration - cut,
+                notes: rightNotes,
+              },
+            ];
+          }
+          return [
+            { ...c, duration: cut },
+            {
+              ...c,
+              id: crypto.randomUUID(),
+              name: `${c.name} (2)`,
+              start: position,
+              offset: c.offset + cut,
+              duration: c.duration - cut,
+            },
+          ];
+        }),
       })),
     );
     setStatus(`Split clip at ${clock(position)}`);
@@ -1199,6 +1309,12 @@ export default function Home() {
     event.preventDefault();
     setSelectedTrackId(trackId);
     setSelectedClipId(clip.id);
+    if (clip.type === 'midi')
+      setBottomMode(
+        tracks.find((track) => track.id === trackId)?.kind === 'drum'
+          ? 'drums'
+          : 'piano',
+      );
     checkpoint();
     gesture.current = {
       clipId: clip.id,
@@ -1208,6 +1324,7 @@ export default function Home() {
       originalStart: clip.start,
       originalDuration: clip.duration,
       originalOffset: clip.offset,
+      originalNotes: clip.notes.map((note) => ({ ...note })),
       mode,
     };
   };
@@ -1215,7 +1332,7 @@ export default function Home() {
     const move = (event: PointerEvent) => {
       const g = gesture.current;
       if (!g) return;
-      const dx = (event.clientX - g.startX) / PX,
+      const dx = (event.clientX - g.startX) / pixelsPerSecond,
         snap = (value: number) => Math.max(0, Math.round(value * 8) / 8);
       if (g.mode === 'move') {
         const start = snap(g.originalStart + dx),
@@ -1232,11 +1349,7 @@ export default function Home() {
             ),
           ),
           target = tracks[targetIndex];
-        if (
-          sourceTrack &&
-          sourceClip &&
-          target.kind === (sourceClip.type === 'midi' ? 'synth' : 'audio')
-        )
+        if (sourceTrack && sourceClip && target.kind === sourceTrack.kind)
           setTracks((old) =>
             old.map((t) =>
               t.id === sourceTrack.id
@@ -1260,12 +1373,26 @@ export default function Home() {
         const clip = tracks
             .flatMap((t) => t.clips)
             .find((c) => c.id === g.clipId),
-          maximum = clip?.buffer ? clip.buffer.duration - g.originalOffset : 64;
-        updateClip(g.clipId, {
-          duration: Math.max(
+          maximum = clip?.buffer ? clip.buffer.duration - g.originalOffset : 64,
+          nextDuration = Math.max(
             0.125,
             Math.min(maximum, Math.round((g.originalDuration + dx) * 8) / 8),
-          ),
+          );
+        updateClip(g.clipId, {
+          duration: nextDuration,
+          ...(clip?.type === 'midi'
+            ? {
+                notes: g.originalNotes
+                  .filter((note) => note.start < nextDuration)
+                  .map((note) => ({
+                    ...note,
+                    duration: Math.min(
+                      note.duration,
+                      nextDuration - note.start,
+                    ),
+                  })),
+              }
+            : {}),
         });
       }
       if (g.mode === 'left') {
@@ -1278,6 +1405,16 @@ export default function Home() {
           start: g.originalStart + delta,
           offset: g.originalOffset + delta,
           duration: g.originalDuration - delta,
+          notes: g.originalNotes
+            .filter((note) => note.start + note.duration > delta)
+            .map((note) => ({
+              ...note,
+              start: Math.max(0, note.start - delta),
+              duration:
+                note.start < delta
+                  ? note.start + note.duration - delta
+                  : note.duration,
+            })),
         });
       }
     };
@@ -1291,7 +1428,7 @@ export default function Home() {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
-  }, [tracks, updateClip]);
+  }, [pixelsPerSecond, tracks, updateClip]);
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -1352,7 +1489,9 @@ export default function Home() {
       const g = loopGesture.current;
       if (!g) return;
       const beat = 60 / bpm,
-        delta = Math.round((event.clientX - g.startX) / PX / beat) * beat,
+        delta =
+          Math.round((event.clientX - g.startX) / pixelsPerSecond / beat) *
+          beat,
         length = g.originalEnd - g.originalStart;
       if (g.mode === 'move') {
         const start = Math.max(0, g.originalStart + delta);
@@ -1375,7 +1514,7 @@ export default function Home() {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
-  }, [bpm]);
+  }, [bpm, pixelsPerSecond]);
 
   useEffect(() => {
     if (bottomMode !== 'piano' || !selectedClipId) return;
@@ -1450,6 +1589,12 @@ export default function Home() {
     if (!tracks.some((t) => t.clips.length))
       return setStatus('Add audio or a synth clip before exporting');
     setStatus('Rendering your mix…');
+    await Promise.all(
+      tracks
+        .filter((track) => track.kind === 'drum')
+        .flatMap((track) => [...new Set(track.drumMap)])
+        .map(loadDrumSound),
+    );
     const seconds = Math.max(
         1,
         ...tracks.flatMap((t) => t.clips.map((c) => c.start + c.duration)),
@@ -1463,11 +1608,13 @@ export default function Home() {
       url = URL.createObjectURL(makeWav(rendered)),
       a = document.createElement('a');
     a.href = url;
-    a.download = 'openwave-mix.wav';
+    const safeName =
+      projectName.trim().replace(/[^a-z0-9-_]+/gi, '-') || 'openwave-mix';
+    a.download = `${safeName}.wav`;
     a.click();
-    URL.revokeObjectURL(url);
-    setStatus('Mix exported as openwave-mix.wav');
-  }, [buildGraph, master, tracks]);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(`Mix exported as ${safeName}.wav`);
+  }, [buildGraph, loadDrumSound, master, projectName, tracks]);
 
   const startNoteGesture = (
     event: ReactPointerEvent,
@@ -1532,6 +1679,11 @@ export default function Home() {
         redo();
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateClip();
+        return;
+      }
       if (
         e.code === 'Space' &&
         !(e.target instanceof HTMLInputElement) &&
@@ -1540,15 +1692,22 @@ export default function Home() {
         e.preventDefault();
         playing ? stop() : void play();
       }
-      if (
-        (e.key === 'Delete' || e.key === 'Backspace') &&
-        !(e.target instanceof HTMLInputElement)
-      )
+      const editingText =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingText)
         deleteClip();
+      if (e.key === 'Home' && !editingText) {
+        e.preventDefault();
+        stop(true);
+      }
+      if (e.key === 'Escape') stop();
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [deleteClip, play, playing, redo, stop, undo]);
+  }, [deleteClip, duplicateClip, play, playing, redo, stop, undo]);
   const bars = Array.from({ length: Math.ceil(duration / 2) }, (_, n) => n + 1);
 
   return (
@@ -1586,7 +1745,12 @@ export default function Home() {
           <span className="prototype">prototype</span>
         </div>
         <div className="project-name">
-          <span className="saved-dot" /> Untitled session
+          <span className="saved-dot" />
+          <input
+            aria-label="Project name"
+            value={projectName}
+            onChange={(event) => setProjectName(event.target.value)}
+          />
         </div>
         <div className="top-actions">
           <button
@@ -1687,6 +1851,20 @@ export default function Home() {
             onChange={(e) => setMaster(Number(e.target.value))}
           />
         </div>
+        <div className="zoom-control">
+          <ZoomOut size={13} />
+          <input
+            aria-label="Timeline zoom"
+            type="range"
+            min="0.5"
+            max="2.5"
+            step="0.1"
+            value={timelineZoom}
+            onChange={(event) => setTimelineZoom(Number(event.target.value))}
+          />
+          <ZoomIn size={13} />
+          <b>{Math.round(timelineZoom * 100)}%</b>
+        </div>
       </section>
       <div className="workspace">
         <aside className="browser-panel">
@@ -1740,11 +1918,7 @@ export default function Home() {
         <section className="arrangement">
           <div className="ruler-row">
             <div className="track-header-label">
-              <button
-                onClick={() =>
-                  setTracks((old) => [...old, makeTrack(old.length)])
-                }
-              >
+              <button onClick={addAudioTrack}>
                 <Plus size={13} /> Audio
               </button>
               <button onClick={addSynth}>
@@ -1756,7 +1930,12 @@ export default function Home() {
             </div>
             <div
               className="ruler"
-              style={{ width: duration * PX }}
+              style={
+                {
+                  width: duration * pixelsPerSecond,
+                  '--timeline-second': `${pixelsPerSecond}px`,
+                } as React.CSSProperties
+              }
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId);
                 seekFromPointer(e);
@@ -1767,15 +1946,18 @@ export default function Home() {
               }}
             >
               {bars.map((bar) => (
-                <span key={bar} style={{ left: (bar - 1) * PX * 2 }}>
+                <span
+                  key={bar}
+                  style={{ left: (bar - 1) * pixelsPerSecond * 2 }}
+                >
                   {bar}
                 </span>
               ))}
               <div
                 className={`loop-brace ${loopEnabled ? 'enabled' : ''}`}
                 style={{
-                  left: loopStart * PX,
-                  width: Math.max(24, (loopEnd - loopStart) * PX),
+                  left: loopStart * pixelsPerSecond,
+                  width: Math.max(24, (loopEnd - loopStart) * pixelsPerSecond),
                 }}
                 onPointerDown={(e) => startLoopGesture(e, 'move')}
                 title="Drag to move the loop"
@@ -1792,7 +1974,10 @@ export default function Home() {
                   onPointerDown={(e) => startLoopGesture(e, 'right')}
                 />
               </div>
-              <div className="ruler-playhead" style={{ left: position * PX }} />
+              <div
+                className="ruler-playhead"
+                style={{ left: position * pixelsPerSecond }}
+              />
             </div>
           </div>
           <div className="tracks-scroll">
@@ -1802,10 +1987,14 @@ export default function Home() {
                 key={track.id}
                 onClick={() => {
                   setSelectedTrackId(track.id);
-                  if (track.kind === 'drum' && track.clips[0]) {
-                    setSelectedClipId(track.clips[0].id);
-                    setBottomMode('drums');
-                  }
+                  setSelectedClipId(track.clips[0]?.id ?? '');
+                  setBottomMode(
+                    track.kind === 'drum'
+                      ? 'drums'
+                      : track.kind === 'synth'
+                        ? 'piano'
+                        : 'devices',
+                  );
                 }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => dropEffect(e, track.id)}
@@ -1842,9 +2031,21 @@ export default function Home() {
                   <div className="track-switches">
                     <button
                       className={track.armed ? 'armed' : ''}
+                      disabled={track.kind !== 'audio'}
                       onClick={(e) => {
                         e.stopPropagation();
-                        updateTrack(track.id, { armed: !track.armed });
+                        checkpoint();
+                        setTracks((old) =>
+                          old.map((item) => ({
+                            ...item,
+                            armed:
+                              item.id === track.id
+                                ? !track.armed
+                                : item.kind === 'audio'
+                                  ? false
+                                  : item.armed,
+                          })),
+                        );
                       }}
                     >
                       R
@@ -1868,14 +2069,20 @@ export default function Home() {
                       M
                     </button>
                     <button
-                      className="remove-track"
+                      title="Duplicate track"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setTracks((old) =>
-                          old.length > 1
-                            ? old.filter((t) => t.id !== track.id)
-                            : old,
-                        );
+                        duplicateTrack(track.id);
+                      }}
+                    >
+                      <Copy size={11} />
+                    </button>
+                    <button
+                      className="remove-track"
+                      title="Delete track"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteTrack(track.id);
                       }}
                     >
                       <X size={12} />
@@ -1914,7 +2121,12 @@ export default function Home() {
                 </div>
                 <div
                   className="track-lane"
-                  style={{ width: duration * PX }}
+                  style={
+                    {
+                      width: duration * pixelsPerSecond,
+                      '--timeline-second': `${pixelsPerSecond}px`,
+                    } as React.CSSProperties
+                  }
                   onPointerDown={(e) => {
                     e.currentTarget.setPointerCapture(e.pointerId);
                     seekFromPointer(e);
@@ -1930,8 +2142,8 @@ export default function Home() {
                       className={`clip ${clip.type} ${selectedClipId === clip.id ? 'clip-selected' : ''}`}
                       style={
                         {
-                          left: clip.start * PX,
-                          width: Math.max(22, clip.duration * PX),
+                          left: clip.start * pixelsPerSecond,
+                          width: Math.max(22, clip.duration * pixelsPerSecond),
                           '--track-color': track.color,
                         } as React.CSSProperties
                       }
@@ -2005,7 +2217,7 @@ export default function Home() {
                         track.kind === 'synth'
                           ? addSynth()
                           : track.kind === 'drum'
-                            ? void addDrumRack()
+                            ? addDrumClip(track.id)
                             : fileInput.current?.click();
                       }}
                     >
@@ -2017,7 +2229,10 @@ export default function Home() {
                           : 'Drop or add audio'}
                     </button>
                   )}
-                  <div className="playhead" style={{ left: position * PX }} />
+                  <div
+                    className="playhead"
+                    style={{ left: position * pixelsPerSecond }}
+                  />
                 </div>
               </div>
             ))}
