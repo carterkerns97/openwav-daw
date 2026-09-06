@@ -9,6 +9,9 @@ Openwave is a lightweight, open-source multitrack audio workspace that runs enti
 - Movable clips with edge trimming, splitting, duplication, and deletion
 - Microphone recording into an armed track
 - Simple oscillator synth with an editable 24-key piano roll
+- Resizable/maximizable piano-roll editor with draggable note lengths
+- Optional 1/16, 1/8, 1/4, and 1/2-note snapping
+- Major/minor key constraints with out-of-key lanes disabled
 - Drag-and-drop effects rack with EQ, compression, reverb, delay, chorus, and saturation
 - Per-track volume, pan, mute, and solo controls
 - Master volume and offline WAV export
