@@ -1305,6 +1305,22 @@ export default function Home() {
   playAtRef.current = playAt;
   const play = useCallback(() => playAt(position), [playAt, position]);
 
+  const seekPianoRuler = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!selectedClip || selectedClip.type !== 'midi') return;
+      event.preventDefault();
+      const rect = event.currentTarget.getBoundingClientRect();
+      const ratio = Math.max(
+        0,
+        Math.min(1, (event.clientX - rect.left) / rect.width),
+      );
+      const nextPosition = selectedClip.start + ratio * selectedClip.duration;
+      if (playing) void playAtRef.current(nextPosition);
+      else setPosition(nextPosition);
+    },
+    [playing, selectedClip],
+  );
+
   const importFiles = useCallback(
     async (list: FileList | File[]) => {
       const files = Array.from(list).filter(
@@ -3402,6 +3418,44 @@ export default function Home() {
             </div>
           ) : selectedClip?.type === 'midi' ? (
             <div className="piano-editor" ref={pianoEditor}>
+              <div className="piano-ruler-corner">CLIP</div>
+              <div
+                className="piano-ruler"
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  seekPianoRuler(event);
+                }}
+                onPointerMove={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId))
+                    seekPianoRuler(event);
+                }}
+              >
+                {Array.from({
+                  length: Math.max(
+                    1,
+                    Math.ceil(selectedClip.duration / (60 / bpm)),
+                  ),
+                }).map((_, beat) => (
+                  <span
+                    className={beat % 4 === 0 ? 'bar' : ''}
+                    key={beat}
+                    style={{
+                      left: `${((beat * (60 / bpm)) / selectedClip.duration) * 100}%`,
+                    }}
+                  >
+                    {Math.floor(beat / 4) + 1}.{(beat % 4) + 1}
+                  </span>
+                ))}
+                {position >= selectedClip.start &&
+                  position <= selectedClip.start + selectedClip.duration && (
+                    <i
+                      className="piano-ruler-playhead"
+                      style={{
+                        left: `${((position - selectedClip.start) / selectedClip.duration) * 100}%`,
+                      }}
+                    />
+                  )}
+              </div>
               <div className="piano-keys">
                 {PITCHES.map((pitch) => (
                   <span
