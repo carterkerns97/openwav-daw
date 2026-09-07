@@ -1025,29 +1025,10 @@ export default function Home() {
     const currentBpm = bpmRef.current;
     if (!Number.isFinite(next) || next === currentBpm) return;
     if (saveHistory) checkpoint();
-    const ratio = currentBpm / next;
-    setTracks((old) =>
-      old.map((track) => ({
-        ...track,
-        clips: track.clips.map((clip) =>
-          clip.type === 'midi'
-            ? {
-                ...clip,
-                duration: clip.duration * ratio,
-                notes: clip.notes.map((note) => ({
-                  ...note,
-                  start: note.start * ratio,
-                  duration: note.duration * ratio,
-                })),
-              }
-            : clip,
-        ),
-      })),
-    );
     bpmRef.current = next;
     setBpm(next);
     setTempoDraft(String(next));
-    setStatus(`Tempo changed to ${next} BPM`);
+    setStatus(`Tempo changed to ${next} BPM — MIDI notes unchanged`);
     if (playing) setTimeout(() => void playAtRef.current(position), 0);
   };
   const commitTempoDraft = () => {
