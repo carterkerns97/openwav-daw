@@ -1812,7 +1812,9 @@ input[type='range'] {
   position: sticky;
   left: 61px;
   bottom: 4px;
+  align-self: end;
   width: max-content;
+  height: max-content;
   grid-column: 2;
   grid-row: 2;
   padding: 4px 8px;
@@ -1821,6 +1823,7 @@ input[type='range'] {
   color: #8b959a;
   font-size: 8px;
   z-index: 4;
+  pointer-events: none;
 }
 .statusbar {
   padding: 0 11px;
