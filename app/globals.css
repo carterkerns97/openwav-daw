@@ -1417,11 +1417,11 @@ input[type='range'] {
 }
 .device {
   position: relative;
-  flex: 0 0 158px;
+  flex: 0 0 238px;
   border: 1px solid #343a3e;
   border-radius: 5px;
   background: #202428;
-  padding: 31px 11px 8px;
+  padding: 32px 10px 9px;
   box-shadow: inset 0 1px #ffffff08;
 }
 .device.disabled {
@@ -1459,46 +1459,88 @@ input[type='range'] {
 .knob {
   --amount: 0deg;
   --device-color: #fff;
-  width: 48px;
-  height: 48px;
-  margin: 4px auto 8px;
+  --fill: 37.5%;
+  display: block;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 5px;
   border-radius: 50%;
   position: relative;
-  background: conic-gradient(
-    from 225deg,
-    var(--device-color) 0deg,
-    var(--device-color) calc((var(--amount) + 135deg) * 0.75),
-    #30363a 0deg,
-    #30363a 270deg,
-    transparent 270deg
-  );
-  box-shadow: inset 0 0 0 8px #191c1f;
+  border: 5px solid #15181a;
+  background: radial-gradient(circle at 40% 35%, #3c4449, #202529 65%), #202529;
+  box-shadow:
+    0 0 0 2px #30383d,
+    inset 0 1px #ffffff18,
+    0 4px 8px #0006;
 }
 .knob i {
   position: absolute;
-  left: 23px;
-  top: 7px;
-  width: 2px;
-  height: 13px;
-  background: white;
-  transform-origin: 1px 17px;
+  left: 21px;
+  top: 4px;
+  width: 3px;
+  height: 17px;
+  background: var(--device-color);
+  transform-origin: 1.5px 20px;
   transform: rotate(var(--amount));
   border-radius: 2px;
+  box-shadow: 0 0 4px var(--device-color);
+  pointer-events: none;
 }
-.device > label {
+.knob input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: ew-resize;
+}
+.effect-body {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 10px;
+  height: 100%;
+}
+.effect-macro {
+  align-self: start;
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 4px;
+  align-items: center;
+  color: #747f84;
+  font-size: 7px;
+}
+.effect-macro .knob {
+  grid-column: 1 / 3;
+}
+.effect-macro b,
+.effect-parameters b {
+  color: #c1c8cb;
+  font-family: monospace;
+  font-size: 7px;
+}
+.effect-parameters {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+.effect-parameters label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 5px;
+  min-width: 0;
   color: #7b858a;
   font-size: 7px;
 }
-.device > label input {
+.effect-parameters label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.effect-parameters input {
   grid-column: 1/3;
   width: 100%;
-}
-.device > label b {
-  color: #b8c0c4;
-  font-family: monospace;
+  height: 10px;
+  accent-color: var(--device-color, var(--accent));
 }
 .delete-device {
   position: absolute;

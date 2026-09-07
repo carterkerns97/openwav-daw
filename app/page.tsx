@@ -57,6 +57,10 @@ type Effect = {
   type: EffectType;
   enabled: boolean;
   amount: number;
+  param1: number;
+  param2: number;
+  param3: number;
+  param4: number;
 };
 type Note = {
   id: string;
@@ -145,6 +149,45 @@ const EFFECT_INFO: Record<
   delay: { name: 'Delay', icon: Radio, color: '#66d2b3' },
   chorus: { name: 'Chorus', icon: Waves, color: '#f08aaa' },
   saturator: { name: 'Saturator', icon: Zap, color: '#f28b54' },
+};
+const EFFECT_CONTROLS: Record<
+  EffectType,
+  {
+    mixLabel: string;
+    labels: [string, string, string, string];
+    defaults: [number, number, number, number, number];
+  }
+> = {
+  eq: {
+    mixLabel: 'OUTPUT',
+    labels: ['LOW', 'MID', 'HIGH', 'MID FREQ'],
+    defaults: [0.78, 0.5, 0.5, 0.5, 0.42],
+  },
+  compressor: {
+    mixLabel: 'DRY / WET',
+    labels: ['THRESHOLD', 'RATIO', 'ATTACK', 'RELEASE'],
+    defaults: [1, 0.55, 0.35, 0.18, 0.38],
+  },
+  reverb: {
+    mixLabel: 'DRY / WET',
+    labels: ['SIZE', 'DECAY', 'PRE-DELAY', 'TONE'],
+    defaults: [0.32, 0.58, 0.55, 0.12, 0.64],
+  },
+  delay: {
+    mixLabel: 'DRY / WET',
+    labels: ['TIME', 'FEEDBACK', 'FILTER', 'WIDTH'],
+    defaults: [0.34, 0.32, 0.38, 0.68, 0.55],
+  },
+  chorus: {
+    mixLabel: 'DRY / WET',
+    labels: ['RATE', 'DEPTH', 'DELAY', 'FEEDBACK'],
+    defaults: [0.42, 0.25, 0.62, 0.35, 0.18],
+  },
+  saturator: {
+    mixLabel: 'DRY / WET',
+    labels: ['DRIVE', 'TONE', 'OUTPUT', 'BIAS'],
+    defaults: [0.7, 0.48, 0.62, 0.46, 0.5],
+  },
 };
 const PITCHES = Array.from({ length: 128 }, (_, i) => 127 - i);
 const NOTE_NAMES = [
@@ -695,72 +738,129 @@ function connectEffects(
   effects
     .filter((e) => e.enabled)
     .forEach((effect) => {
-      const amount = effect.amount;
+      const defaults = EFFECT_CONTROLS[effect.type].defaults;
+      const amount = effect.amount ?? defaults[0];
+      const p1 = effect.param1 ?? defaults[1];
+      const p2 = effect.param2 ?? defaults[2];
+      const p3 = effect.param3 ?? defaults[3];
+      const p4 = effect.param4 ?? defaults[4];
       if (effect.type === 'eq') {
-        const node = ctx.createBiquadFilter();
-        node.type = 'peaking';
-        node.frequency.value = 2200;
-        node.Q.value = 1.1;
-        node.gain.value = (amount - 0.5) * 18;
-        current.connect(node);
-        current = node;
+        const low = ctx.createBiquadFilter(),
+          mid = ctx.createBiquadFilter(),
+          high = ctx.createBiquadFilter(),
+          output = ctx.createGain();
+        low.type = 'lowshelf';
+        low.frequency.value = 180;
+        low.gain.value = (p1 - 0.5) * 30;
+        mid.type = 'peaking';
+        mid.frequency.value = 250 * Math.pow(16, p4);
+        mid.Q.value = 0.5 + p4 * 3.5;
+        mid.gain.value = (p2 - 0.5) * 30;
+        high.type = 'highshelf';
+        high.frequency.value = 6500;
+        high.gain.value = (p3 - 0.5) * 30;
+        output.gain.value = Math.pow(10, ((amount - 0.5) * 18) / 20);
+        current.connect(low).connect(mid).connect(high).connect(output);
+        current = output;
       }
       if (effect.type === 'compressor') {
-        const node = ctx.createDynamicsCompressor();
-        node.threshold.value = -8 - amount * 36;
-        node.ratio.value = 2 + amount * 10;
-        node.attack.value = 0.01;
-        node.release.value = 0.2;
-        current.connect(node);
-        current = node;
+        const sum = ctx.createGain(),
+          dry = ctx.createGain(),
+          wet = ctx.createGain(),
+          node = ctx.createDynamicsCompressor();
+        node.threshold.value = -4 - p1 * 56;
+        node.ratio.value = 1 + p2 * 19;
+        node.attack.value = 0.001 + p3 * 0.2;
+        node.release.value = 0.04 + p4 * 0.96;
+        dry.gain.value = 1 - amount;
+        wet.gain.value = amount;
+        current.connect(dry).connect(sum);
+        current.connect(node).connect(wet).connect(sum);
+        current = sum;
       }
       if (effect.type === 'saturator') {
-        const node = ctx.createWaveShaper(),
+        const sum = ctx.createGain(),
+          dry = ctx.createGain(),
+          wet = ctx.createGain(),
+          tone = ctx.createBiquadFilter(),
+          output = ctx.createGain(),
+          node = ctx.createWaveShaper(),
           curve = new Float32Array(1024),
-          drive = 1 + amount * 10;
+          drive = 1 + p1 * 24;
         for (let i = 0; i < curve.length; i++) {
-          const x = (i * 2) / curve.length - 1;
+          const x = (i * 2) / curve.length - 1 + (p4 - 0.5) * 0.22;
           curve[i] = Math.tanh(x * drive);
         }
         node.curve = curve;
-        node.oversample = '2x';
-        current.connect(node);
-        current = node;
+        node.oversample = '4x';
+        tone.type = 'lowpass';
+        tone.frequency.value = 1200 * Math.pow(14, p2);
+        output.gain.value = 0.35 + p3 * 1.3;
+        dry.gain.value = 1 - amount;
+        wet.gain.value = amount;
+        current.connect(dry).connect(sum);
+        current
+          .connect(node)
+          .connect(tone)
+          .connect(output)
+          .connect(wet)
+          .connect(sum);
+        current = sum;
       }
       if (effect.type === 'delay') {
         const sum = ctx.createGain(),
           dry = ctx.createGain(),
           wet = ctx.createGain(),
           delay = ctx.createDelay(2),
-          feedback = ctx.createGain();
+          feedback = ctx.createGain(),
+          filter = ctx.createBiquadFilter(),
+          pan = ctx.createStereoPanner();
         dry.gain.value = 1 - amount * 0.35;
-        wet.gain.value = amount * 0.7;
-        delay.delayTime.value = 0.22 + amount * 0.28;
-        feedback.gain.value = 0.18 + amount * 0.38;
+        wet.gain.value = amount;
+        delay.delayTime.value = 0.04 + p1 * 0.96;
+        feedback.gain.value = Math.min(0.88, p2 * 0.9);
+        filter.type = 'lowpass';
+        filter.frequency.value = 700 * Math.pow(20, p3);
+        pan.pan.value = (p4 - 0.5) * 1.7;
         current.connect(dry).connect(sum);
-        current.connect(delay).connect(wet).connect(sum);
-        delay.connect(feedback).connect(delay);
+        current
+          .connect(delay)
+          .connect(filter)
+          .connect(pan)
+          .connect(wet)
+          .connect(sum);
+        filter.connect(feedback).connect(delay);
         current = sum;
       }
       if (effect.type === 'reverb') {
         const sum = ctx.createGain(),
           dry = ctx.createGain(),
           wet = ctx.createGain(),
+          preDelay = ctx.createDelay(0.25),
+          tone = ctx.createBiquadFilter(),
           convolver = ctx.createConvolver(),
-          length = Math.floor(ctx.sampleRate * (1 + amount * 2.5)),
+          length = Math.floor(ctx.sampleRate * (0.35 + p1 * 4.65)),
           impulse = ctx.createBuffer(2, length, ctx.sampleRate);
         for (let c = 0; c < 2; c++) {
           const data = impulse.getChannelData(c);
           for (let i = 0; i < length; i++)
             data[i] =
               (Math.random() * 2 - 1) *
-              Math.pow(1 - i / length, 2 + amount * 2);
+              Math.pow(1 - i / length, 1 + (1 - p2) * 6);
         }
         convolver.buffer = impulse;
-        dry.gain.value = 1 - amount * 0.25;
-        wet.gain.value = amount * 0.75;
+        preDelay.delayTime.value = p3 * 0.18;
+        tone.type = 'lowpass';
+        tone.frequency.value = 900 * Math.pow(18, p4);
+        dry.gain.value = 1 - amount * 0.28;
+        wet.gain.value = amount;
         current.connect(dry).connect(sum);
-        current.connect(convolver).connect(wet).connect(sum);
+        current
+          .connect(preDelay)
+          .connect(convolver)
+          .connect(tone)
+          .connect(wet)
+          .connect(sum);
         current = sum;
       }
       if (effect.type === 'chorus') {
@@ -769,16 +869,19 @@ function connectEffects(
           wet = ctx.createGain(),
           delay = ctx.createDelay(0.1),
           lfo = ctx.createOscillator(),
-          depth = ctx.createGain();
-        dry.gain.value = 0.85;
-        wet.gain.value = amount * 0.8;
-        delay.delayTime.value = 0.018;
-        lfo.frequency.value = 0.25 + amount * 1.5;
-        depth.gain.value = 0.003 + amount * 0.008;
+          depth = ctx.createGain(),
+          feedback = ctx.createGain();
+        dry.gain.value = 1 - amount * 0.25;
+        wet.gain.value = amount;
+        delay.delayTime.value = 0.004 + p3 * 0.026;
+        lfo.frequency.value = 0.05 + p1 * 5.95;
+        depth.gain.value = 0.0005 + p2 * 0.012;
+        feedback.gain.value = p4 * 0.35;
         lfo.connect(depth).connect(delay.delayTime);
         lfo.start();
         current.connect(dry).connect(sum);
         current.connect(delay).connect(wet).connect(sum);
+        delay.connect(feedback).connect(delay);
         current = sum;
       }
     });
@@ -2000,6 +2103,8 @@ export default function Home() {
 
   const addEffect = (trackId: string, type: EffectType) => {
     checkpoint();
+    const [amount, param1, param2, param3, param4] =
+      EFFECT_CONTROLS[type].defaults;
     setTracks((old) =>
       old.map((t) =>
         t.id === trackId
@@ -2007,7 +2112,16 @@ export default function Home() {
               ...t,
               effects: [
                 ...t.effects,
-                { id: crypto.randomUUID(), type, enabled: true, amount: 0.5 },
+                {
+                  id: crypto.randomUUID(),
+                  type,
+                  enabled: true,
+                  amount,
+                  param1,
+                  param2,
+                  param3,
+                  param4,
+                },
               ],
             }
           : t,
@@ -3538,11 +3652,21 @@ export default function Home() {
               )}
               {selectedTrack?.effects.map((effect) => {
                 const info = EFFECT_INFO[effect.type],
-                  Icon = info.icon;
+                  Icon = info.icon,
+                  controls = EFFECT_CONTROLS[effect.type],
+                  values = [
+                    effect.param1 ?? controls.defaults[1],
+                    effect.param2 ?? controls.defaults[2],
+                    effect.param3 ?? controls.defaults[3],
+                    effect.param4 ?? controls.defaults[4],
+                  ];
                 return (
                   <div
                     className={`device ${effect.enabled ? '' : 'disabled'}`}
                     key={effect.id}
+                    style={
+                      { '--device-color': info.color } as React.CSSProperties
+                    }
                   >
                     <div className="device-head">
                       <span style={{ color: info.color }}>
@@ -3558,33 +3682,57 @@ export default function Home() {
                         {effect.enabled ? 'ON' : 'OFF'}
                       </button>
                     </div>
-                    <div
-                      className="knob"
-                      style={
-                        {
-                          '--amount': `${effect.amount * 270 - 135}deg`,
-                          '--device-color': info.color,
-                        } as React.CSSProperties
-                      }
-                    >
-                      <i />
+                    <div className="effect-body">
+                      <label className="effect-macro">
+                        <span
+                          className="knob"
+                          style={
+                            {
+                              '--amount': `${effect.amount * 270 - 135}deg`,
+                              '--fill': `${effect.amount * 75}%`,
+                            } as React.CSSProperties
+                          }
+                        >
+                          <i />
+                          <input
+                            aria-label={`${info.name} ${controls.mixLabel}`}
+                            type="range"
+                            min="0"
+                            max="1"
+                            step=".01"
+                            value={effect.amount}
+                            onChange={(e) =>
+                              updateEffect(selectedTrack.id, effect.id, {
+                                amount: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </span>
+                        <span>{controls.mixLabel}</span>
+                        <b>{Math.round(effect.amount * 100)}%</b>
+                      </label>
+                      <div className="effect-parameters">
+                        {controls.labels.map((label, index) => (
+                          <label key={label}>
+                            <span>{label}</span>
+                            <b>{Math.round(values[index] * 100)}%</b>
+                            <input
+                              aria-label={`${info.name} ${label}`}
+                              type="range"
+                              min="0"
+                              max="1"
+                              step=".01"
+                              value={values[index]}
+                              onChange={(e) =>
+                                updateEffect(selectedTrack.id, effect.id, {
+                                  [`param${index + 1}`]: Number(e.target.value),
+                                } as Partial<Effect>)
+                              }
+                            />
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                    <label>
-                      {effect.type === 'compressor' ? 'AMOUNT' : 'DRY / WET'}
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step=".01"
-                        value={effect.amount}
-                        onChange={(e) =>
-                          updateEffect(selectedTrack.id, effect.id, {
-                            amount: Number(e.target.value),
-                          })
-                        }
-                      />
-                      <b>{Math.round(effect.amount * 100)}%</b>
-                    </label>
                     <button
                       className="delete-device"
                       onClick={() =>
