@@ -2723,95 +2723,104 @@ export default function Home() {
                           : `${track.clips.length} audio clip${track.clips.length === 1 ? '' : 's'}`}
                     </small>
                   </div>
-                  <div className="track-switches">
-                    <button
-                      className={track.armed ? 'armed' : ''}
-                      disabled={track.kind !== 'audio'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        checkpoint();
-                        setTracks((old) =>
-                          old.map((item) => ({
-                            ...item,
-                            armed:
-                              item.id === track.id
-                                ? !track.armed
-                                : item.kind === 'audio'
-                                  ? false
-                                  : item.armed,
-                          })),
-                        );
-                      }}
-                    >
-                      R
-                    </button>
-                    <button
-                      className={track.solo ? 'solo' : ''}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateTrack(track.id, { solo: !track.solo });
-                      }}
-                    >
-                      S
-                    </button>
-                    <button
-                      className={track.muted ? 'muted' : ''}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateTrack(track.id, { muted: !track.muted });
-                      }}
-                    >
-                      M
-                    </button>
-                    <button
-                      title="Duplicate track"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        duplicateTrack(track.id);
-                      }}
-                    >
-                      <Copy size={11} />
-                    </button>
-                    <button
-                      className="remove-track"
-                      title="Delete track"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteTrack(track.id);
-                      }}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                  <div className="mini-mixer">
-                    <label>
-                      VOL{' '}
-                      <input
-                        type="range"
-                        min="0"
-                        max="1.3"
-                        step=".01"
-                        value={track.gain}
-                        onChange={(e) =>
-                          updateTrack(track.id, {
-                            gain: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      PAN{' '}
-                      <input
-                        type="range"
-                        min="-1"
-                        max="1"
-                        step=".01"
-                        value={track.pan}
-                        onChange={(e) =>
-                          updateTrack(track.id, { pan: Number(e.target.value) })
-                        }
-                      />
-                    </label>
+                  <div className="track-footer">
+                    <div className="track-switches">
+                      <button
+                        className={track.armed ? 'armed' : ''}
+                        disabled={track.kind !== 'audio'}
+                        title="Arm track for recording"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          checkpoint();
+                          setTracks((old) =>
+                            old.map((item) => ({
+                              ...item,
+                              armed:
+                                item.id === track.id
+                                  ? !track.armed
+                                  : item.kind === 'audio'
+                                    ? false
+                                    : item.armed,
+                            })),
+                          );
+                        }}
+                      >
+                        R
+                      </button>
+                      <button
+                        className={track.solo ? 'solo' : ''}
+                        title="Solo track"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateTrack(track.id, { solo: !track.solo });
+                        }}
+                      >
+                        S
+                      </button>
+                      <button
+                        className={track.muted ? 'muted' : ''}
+                        title="Mute track"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateTrack(track.id, { muted: !track.muted });
+                        }}
+                      >
+                        M
+                      </button>
+                      <button
+                        title="Duplicate track"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          duplicateTrack(track.id);
+                        }}
+                      >
+                        <Copy size={11} />
+                      </button>
+                      <button
+                        className="remove-track"
+                        title="Delete track"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTrack(track.id);
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                    <div className="mini-mixer">
+                      <label>
+                        <span>VOL</span>
+                        <input
+                          aria-label={`${track.name} volume`}
+                          type="range"
+                          min="0"
+                          max="1.3"
+                          step=".01"
+                          value={track.gain}
+                          onChange={(e) =>
+                            updateTrack(track.id, {
+                              gain: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>PAN</span>
+                        <input
+                          aria-label={`${track.name} pan`}
+                          type="range"
+                          min="-1"
+                          max="1"
+                          step=".01"
+                          value={track.pan}
+                          onChange={(e) =>
+                            updateTrack(track.id, {
+                              pan: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <div
