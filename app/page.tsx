@@ -1025,10 +1025,46 @@ export default function Home() {
     const currentBpm = bpmRef.current;
     if (!Number.isFinite(next) || next === currentBpm) return;
     if (saveHistory) checkpoint();
+    const currentBeat = 60 / currentBpm;
+    const nextBeat = 60 / next;
+    setTracks((old) =>
+      old.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (clip.type !== 'midi') return clip;
+          const toQuarterBeat = (seconds: number) =>
+            Math.round((seconds / currentBeat) * 4) / 4;
+          const lengthBeats = Math.max(0.25, toQuarterBeat(clip.duration));
+          return {
+            ...clip,
+            start: toQuarterBeat(clip.start) * nextBeat,
+            duration: lengthBeats * nextBeat,
+            notes: clip.notes.map((note) => {
+              const startBeats = Math.min(
+                Math.max(0, toQuarterBeat(note.start)),
+                lengthBeats - 0.25,
+              );
+              const durationBeats = Math.max(
+                0.25,
+                toQuarterBeat(note.duration),
+              );
+              return {
+                ...note,
+                start: startBeats * nextBeat,
+                duration:
+                  Math.min(durationBeats, lengthBeats - startBeats) * nextBeat,
+              };
+            }),
+          };
+        }),
+      })),
+    );
     bpmRef.current = next;
     setBpm(next);
     setTempoDraft(String(next));
-    setStatus(`Tempo changed to ${next} BPM — MIDI notes unchanged`);
+    setStatus(
+      `Tempo changed to ${next} BPM — MIDI stays locked to the beat grid`,
+    );
     if (playing) setTimeout(() => void playAtRef.current(position), 0);
   };
   const commitTempoDraft = () => {
@@ -1400,10 +1436,15 @@ export default function Home() {
     [audioContext, checkpoint, position, selectedTrackId],
   );
 
-  const addSynth = () => {
+  const addSynth = (requestedTrackId?: string) => {
     checkpoint();
     const clip = defaultMidiClip(position, bpm),
-      targetId = selectedTrack?.kind === 'synth' ? selectedTrack.id : undefined;
+      requestedTrack = tracks.find(
+        (track) => track.id === requestedTrackId && track.kind === 'synth',
+      ),
+      targetId =
+        requestedTrack?.id ??
+        (selectedTrack?.kind === 'synth' ? selectedTrack.id : undefined);
     if (targetId) {
       setTracks((old) =>
         old.map((t) =>
@@ -2345,7 +2386,7 @@ export default function Home() {
             <strong>Add audio</strong>
             <small>WAV, MP3, M4A, OGG</small>
           </button>
-          <button className="synth-card" onClick={addSynth}>
+          <button className="synth-card" onClick={() => addSynth()}>
             <span>
               <Keyboard size={18} />
             </span>
@@ -2361,7 +2402,7 @@ export default function Home() {
           </button>
           <div className="library-section">
             <p>INSTRUMENTS</p>
-            <button onClick={addSynth}>
+            <button onClick={() => addSynth()}>
               <Keyboard size={14} /> Simple Synth <Plus size={12} />
             </button>
             <button onClick={() => void addDrumRack()}>
@@ -2384,7 +2425,7 @@ export default function Home() {
               <button onClick={addAudioTrack}>
                 <Plus size={13} /> Audio
               </button>
-              <button onClick={addSynth}>
+              <button onClick={() => addSynth()}>
                 <Keyboard size={13} /> Synth
               </button>
               <button onClick={() => void addDrumRack()}>
@@ -2678,7 +2719,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.stopPropagation();
                         track.kind === 'synth'
-                          ? addSynth()
+                          ? addSynth(track.id)
                           : track.kind === 'drum'
                             ? addDrumClip(track.id)
                             : fileInput.current?.click();
