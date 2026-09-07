@@ -795,6 +795,7 @@ export default function Home() {
   const [selectedClipId, setSelectedClipId] = useState('');
   const [position, setPosition] = useState(0);
   const [bpm, setBpm] = useState(120);
+  const [tempoDraft, setTempoDraft] = useState('120');
   const [metronome, setMetronome] = useState(false);
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [loopStart, setLoopStart] = useState(0);
@@ -826,6 +827,17 @@ export default function Home() {
     chunks = useRef<Blob[]>([]),
     fileInput = useRef<HTMLInputElement>(null);
   const pianoEditor = useRef<HTMLDivElement>(null);
+  const bpmRef = useRef(120);
+  const tempoDrag = useRef<{
+    pointerId: number;
+    startY: number;
+    bpm: number;
+  } | null>(null);
+  const tapTimes = useRef<number[]>([]);
+  useEffect(() => {
+    bpmRef.current = bpm;
+    setTempoDraft(String(bpm));
+  }, [bpm]);
   const gesture = useRef<{
     clipId: string;
     trackId: string;
@@ -1008,11 +1020,12 @@ export default function Home() {
     setPlaying(false);
     if (reset) setPosition(0);
   }, []);
-  const changeTempo = (nextValue: number) => {
+  const changeTempo = (nextValue: number, saveHistory = true) => {
     const next = Math.max(40, Math.min(240, Math.round(nextValue)));
-    if (!Number.isFinite(next) || next === bpm) return;
-    checkpoint();
-    const ratio = bpm / next;
+    const currentBpm = bpmRef.current;
+    if (!Number.isFinite(next) || next === currentBpm) return;
+    if (saveHistory) checkpoint();
+    const ratio = currentBpm / next;
     setTracks((old) =>
       old.map((track) => ({
         ...track,
@@ -1031,9 +1044,34 @@ export default function Home() {
         ),
       })),
     );
+    bpmRef.current = next;
     setBpm(next);
+    setTempoDraft(String(next));
     setStatus(`Tempo changed to ${next} BPM`);
     if (playing) setTimeout(() => void playAtRef.current(position), 0);
+  };
+  const commitTempoDraft = () => {
+    const value = Number(tempoDraft);
+    if (Number.isFinite(value)) changeTempo(value);
+    else setTempoDraft(String(bpm));
+  };
+  const tapTempo = () => {
+    const now = performance.now();
+    const recent = [...tapTimes.current, now]
+      .filter((time) => now - time < 3000)
+      .slice(-5);
+    tapTimes.current = recent;
+    if (recent.length < 2) {
+      setStatus('Tap again to set tempo');
+      return;
+    }
+    const intervals = recent
+      .slice(1)
+      .map((time, index) => time - recent[index]);
+    changeTempo(
+      60000 /
+        (intervals.reduce((sum, value) => sum + value, 0) / intervals.length),
+    );
   };
   const seekFromPointer = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
@@ -2213,17 +2251,74 @@ export default function Home() {
           </button>
           <output className="time-readout">{clock(position)}</output>
         </div>
-        <div className="tempo-control">
-          <span>TEMPO</span>
-          <input
-            aria-label="Tempo"
-            type="number"
-            min="40"
-            max="240"
-            value={bpm}
-            onChange={(e) => changeTempo(Number(e.target.value))}
-          />
-          <b>BPM</b>
+        <div className="tempo-control" title="Drag the BPM value up or down">
+          <span className="tempo-label">TEMPO</span>
+          <button
+            className="tempo-step"
+            aria-label="Decrease tempo"
+            onClick={() => changeTempo(bpmRef.current - 1)}
+          >
+            −
+          </button>
+          <label
+            className="tempo-value"
+            onPointerDown={(event) => {
+              if (event.target instanceof HTMLInputElement) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              tempoDrag.current = {
+                pointerId: event.pointerId,
+                startY: event.clientY,
+                bpm: bpmRef.current,
+              };
+              checkpoint();
+            }}
+            onPointerMove={(event) => {
+              const drag = tempoDrag.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              changeTempo(drag.bpm + (drag.startY - event.clientY) / 2, false);
+            }}
+            onPointerUp={() => {
+              tempoDrag.current = null;
+            }}
+          >
+            <input
+              aria-label="Tempo in BPM"
+              inputMode="numeric"
+              value={tempoDraft}
+              onChange={(event) => setTempoDraft(event.target.value)}
+              onBlur={commitTempoDraft}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+                if (event.key === 'Escape') {
+                  setTempoDraft(String(bpm));
+                  event.currentTarget.blur();
+                }
+                if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  changeTempo(bpmRef.current + (event.shiftKey ? 10 : 1));
+                }
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  changeTempo(bpmRef.current - (event.shiftKey ? 10 : 1));
+                }
+              }}
+            />
+            <b>BPM</b>
+          </label>
+          <button
+            className="tempo-step"
+            aria-label="Increase tempo"
+            onClick={() => changeTempo(bpmRef.current + 1)}
+          >
+            +
+          </button>
+          <button
+            className="tap-tempo"
+            onClick={tapTempo}
+            title="Tap repeatedly to detect tempo"
+          >
+            TAP
+          </button>
         </div>
         <div className="master-control">
           <Volume2 size={15} />
