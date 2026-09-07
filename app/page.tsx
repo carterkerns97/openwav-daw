@@ -89,7 +89,33 @@ type Track = {
   solo: boolean;
   armed: boolean;
   waveform: OscillatorType;
+  synth: SynthPatch;
   drumMap: string[];
+};
+
+type SynthPatch = {
+  preset: string;
+  osc1: OscillatorType;
+  osc2: OscillatorType;
+  osc2Tune: number;
+  mix: number;
+  unison: number;
+  detune: number;
+  sub: number;
+  noise: number;
+  filterType: BiquadFilterType;
+  cutoff: number;
+  resonance: number;
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+  lfoRate: number;
+  lfoDepth: number;
+  drive: number;
+  width: number;
+  delay: number;
+  reverb: number;
 };
 
 type DrumSound = {
@@ -134,6 +160,224 @@ const NOTE_NAMES = [
   'A',
   'A♯',
   'B',
+];
+const INIT_SYNTH: SynthPatch = {
+  preset: 'Init Patch',
+  osc1: 'sawtooth',
+  osc2: 'square',
+  osc2Tune: 0,
+  mix: 0.35,
+  unison: 1,
+  detune: 8,
+  sub: 0.12,
+  noise: 0,
+  filterType: 'lowpass',
+  cutoff: 9000,
+  resonance: 1,
+  attack: 0.01,
+  decay: 0.18,
+  sustain: 0.75,
+  release: 0.22,
+  lfoRate: 2,
+  lfoDepth: 0,
+  drive: 0.05,
+  width: 0.5,
+  delay: 0,
+  reverb: 0.08,
+};
+const SYNTH_PRESETS: Array<SynthPatch & { category: string }> = [
+  { ...INIT_SYNTH, category: 'Init' },
+  {
+    ...INIT_SYNTH,
+    preset: 'Neon Superstack',
+    category: 'Lead',
+    osc1: 'sawtooth',
+    osc2: 'sawtooth',
+    mix: 0.5,
+    unison: 5,
+    detune: 24,
+    cutoff: 7600,
+    resonance: 2.5,
+    attack: 0.015,
+    decay: 0.3,
+    sustain: 0.72,
+    release: 0.38,
+    drive: 0.2,
+    width: 0.95,
+    delay: 0.24,
+    reverb: 0.18,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Moonlit Glass',
+    category: 'Keys',
+    osc1: 'sine',
+    osc2: 'triangle',
+    osc2Tune: 12,
+    mix: 0.3,
+    unison: 3,
+    detune: 9,
+    cutoff: 5800,
+    resonance: 6,
+    attack: 0.008,
+    decay: 0.75,
+    sustain: 0.28,
+    release: 1.5,
+    lfoRate: 0.35,
+    lfoDepth: 0.12,
+    width: 0.8,
+    delay: 0.28,
+    reverb: 0.48,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Gravity Bass',
+    category: 'Bass',
+    osc1: 'sawtooth',
+    osc2: 'square',
+    osc2Tune: -12,
+    mix: 0.28,
+    unison: 2,
+    detune: 5,
+    sub: 0.55,
+    cutoff: 720,
+    resonance: 8,
+    attack: 0.005,
+    decay: 0.22,
+    sustain: 0.64,
+    release: 0.16,
+    drive: 0.52,
+    width: 0.2,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Aurora Cathedral',
+    category: 'Pad',
+    osc1: 'sawtooth',
+    osc2: 'triangle',
+    osc2Tune: 12,
+    mix: 0.42,
+    unison: 5,
+    detune: 18,
+    sub: 0.18,
+    noise: 0.035,
+    cutoff: 3400,
+    resonance: 3,
+    attack: 1.35,
+    decay: 1.8,
+    sustain: 0.76,
+    release: 3.8,
+    lfoRate: 0.14,
+    lfoDepth: 0.2,
+    width: 1,
+    delay: 0.18,
+    reverb: 0.68,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Chrome Pluck',
+    category: 'Pluck',
+    osc1: 'square',
+    osc2: 'sine',
+    osc2Tune: 12,
+    mix: 0.22,
+    unison: 3,
+    detune: 12,
+    cutoff: 2800,
+    resonance: 10,
+    attack: 0.003,
+    decay: 0.22,
+    sustain: 0.06,
+    release: 0.32,
+    drive: 0.15,
+    width: 0.72,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Solar Brass',
+    category: 'Brass',
+    osc1: 'sawtooth',
+    osc2: 'square',
+    osc2Tune: -12,
+    mix: 0.22,
+    unison: 4,
+    detune: 15,
+    cutoff: 2100,
+    resonance: 4.5,
+    attack: 0.12,
+    decay: 0.55,
+    sustain: 0.7,
+    release: 0.7,
+    lfoRate: 5.2,
+    lfoDepth: 0.04,
+    drive: 0.24,
+    width: 0.65,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Orbit Arp',
+    category: 'Sequence',
+    osc1: 'triangle',
+    osc2: 'square',
+    osc2Tune: 12,
+    mix: 0.32,
+    unison: 2,
+    detune: 7,
+    cutoff: 4500,
+    resonance: 9,
+    attack: 0.002,
+    decay: 0.14,
+    sustain: 0.16,
+    release: 0.2,
+    lfoRate: 6,
+    lfoDepth: 0.18,
+    width: 0.75,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Dust Choir',
+    category: 'Texture',
+    osc1: 'triangle',
+    osc2: 'sawtooth',
+    osc2Tune: 7,
+    mix: 0.48,
+    unison: 5,
+    detune: 28,
+    sub: 0.08,
+    noise: 0.09,
+    cutoff: 2600,
+    resonance: 5,
+    attack: 0.65,
+    decay: 1.2,
+    sustain: 0.58,
+    release: 2.7,
+    lfoRate: 0.22,
+    lfoDepth: 0.25,
+    drive: 0.12,
+    width: 1,
+  },
+  {
+    ...INIT_SYNTH,
+    preset: 'Laser Monolith',
+    category: 'Lead',
+    osc1: 'square',
+    osc2: 'sawtooth',
+    osc2Tune: -12,
+    mix: 0.42,
+    unison: 3,
+    detune: 16,
+    sub: 0.25,
+    cutoff: 1250,
+    resonance: 13,
+    attack: 0.006,
+    decay: 0.4,
+    sustain: 0.5,
+    release: 0.55,
+    lfoRate: 3.6,
+    lfoDepth: 0.32,
+    drive: 0.38,
+    width: 0.55,
+  },
 ];
 const DRUM_SOUNDS: DrumSound[] = [
   {
@@ -314,6 +558,7 @@ function makeTrack(index: number, kind: Track['kind'] = 'audio'): Track {
     solo: false,
     armed: index === 0,
     waveform: 'sawtooth',
+    synth: { ...INIT_SYNTH },
     drumMap: [...DEFAULT_DRUM_MAP],
   };
 }
@@ -711,6 +956,29 @@ export default function Home() {
   );
   const updateTrack = (id: string, patch: Partial<Track>) =>
     setTracks((old) => old.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  const updateSynth = (id: string, patch: Partial<SynthPatch>) =>
+    setTracks((old) =>
+      old.map((track) =>
+        track.id === id
+          ? {
+              ...track,
+              synth: {
+                ...(track.synth ?? INIT_SYNTH),
+                ...patch,
+                preset: patch.preset ?? 'Custom',
+              },
+            }
+          : track,
+      ),
+    );
+  const applySynthPreset = (trackId: string, presetName: string) => {
+    const preset = SYNTH_PRESETS.find((item) => item.preset === presetName);
+    if (!preset) return;
+    checkpoint();
+    const { category: _category, ...patch } = preset;
+    updateTrack(trackId, { synth: { ...patch }, waveform: patch.osc1 });
+    setStatus(`${preset.preset} loaded`);
+  };
   const updateClip = useCallback(
     (clipId: string, patch: Partial<Clip>) =>
       setTracks((old) =>
@@ -845,28 +1113,131 @@ export default function Home() {
               const noteStart = clip.start + note.start,
                 noteEnd = Math.min(clipEnd, noteStart + note.duration);
               if (noteEnd <= startPosition) return;
-              const osc = ctx.createOscillator(),
+              const patch = track.synth ?? INIT_SYNTH,
                 amp = ctx.createGain(),
+                filter = ctx.createBiquadFilter(),
+                shaper = ctx.createWaveShaper(),
                 startAt =
                   ctx.currentTime + Math.max(0, noteStart - startPosition),
                 endAt =
-                  ctx.currentTime + Math.max(0.04, noteEnd - startPosition);
-              osc.type = track.waveform;
-              osc.frequency.value = 440 * Math.pow(2, (note.pitch - 69) / 12);
+                  ctx.currentTime + Math.max(0.04, noteEnd - startPosition),
+                releaseEnd = endAt + patch.release,
+                baseFrequency = 440 * Math.pow(2, (note.pitch - 69) / 12),
+                peak = Math.max(0.02, note.velocity * 0.17),
+                sustain = Math.max(0.0001, peak * patch.sustain);
+              filter.type = patch.filterType;
+              filter.frequency.value = patch.cutoff;
+              filter.Q.value = patch.resonance;
+              const curve = new Float32Array(512);
+              for (let i = 0; i < curve.length; i++) {
+                const x = (i * 2) / (curve.length - 1) - 1;
+                curve[i] = Math.tanh(x * (1 + patch.drive * 8));
+              }
+              shaper.curve = curve;
+              shaper.oversample = '2x';
+              filter.connect(shaper).connect(amp);
+              amp.connect(bus);
+              if (patch.delay > 0) {
+                const delay = ctx.createDelay(0.8);
+                const feedback = ctx.createGain();
+                const wet = ctx.createGain();
+                delay.delayTime.value = 0.22;
+                feedback.gain.value = 0.24 + patch.delay * 0.38;
+                wet.gain.value = patch.delay * 0.55;
+                amp.connect(delay);
+                delay.connect(feedback).connect(delay);
+                delay.connect(wet).connect(bus);
+              }
+              if (patch.reverb > 0) {
+                const ambienceA = ctx.createDelay(0.15);
+                const ambienceB = ctx.createDelay(0.15);
+                const wetA = ctx.createGain();
+                const wetB = ctx.createGain();
+                ambienceA.delayTime.value = 0.043;
+                ambienceB.delayTime.value = 0.071;
+                wetA.gain.value = patch.reverb * 0.34;
+                wetB.gain.value = patch.reverb * 0.24;
+                amp.connect(ambienceA).connect(wetA).connect(bus);
+                amp.connect(ambienceB).connect(wetB).connect(bus);
+              }
               amp.gain.setValueAtTime(0.0001, startAt);
-              amp.gain.exponentialRampToValueAtTime(
-                Math.max(0.02, note.velocity * 0.18),
-                startAt + 0.015,
+              const attackEnd = Math.min(endAt, startAt + patch.attack);
+              const decayEnd = Math.min(endAt, attackEnd + patch.decay);
+              amp.gain.linearRampToValueAtTime(peak, attackEnd);
+              amp.gain.exponentialRampToValueAtTime(sustain, decayEnd);
+              amp.gain.setValueAtTime(sustain, endAt);
+              amp.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+
+              const voiceCount = Math.max(1, Math.round(patch.unison));
+              const addOscillator = (
+                type: OscillatorType,
+                frequency: number,
+                level: number,
+                tune = 0,
+              ) => {
+                for (let voice = 0; voice < voiceCount; voice++) {
+                  const osc = ctx.createOscillator();
+                  const voiceGain = ctx.createGain();
+                  const voicePan = ctx.createStereoPanner();
+                  const spread =
+                    voiceCount === 1 ? 0 : voice / (voiceCount - 1) - 0.5;
+                  osc.type = type;
+                  osc.frequency.value = frequency * Math.pow(2, tune / 12);
+                  osc.detune.value = spread * patch.detune * 2;
+                  voiceGain.gain.value = level / voiceCount;
+                  voicePan.pan.value = spread * patch.width * 1.8;
+                  osc.connect(voiceGain).connect(voicePan).connect(filter);
+                  osc.start(startAt);
+                  osc.stop(releaseEnd + 0.03);
+                  if (ctx instanceof AudioContext) sources.current.push(osc);
+                }
+              };
+              addOscillator(patch.osc1, baseFrequency, 1 - patch.mix * 0.55);
+              addOscillator(
+                patch.osc2,
+                baseFrequency,
+                patch.mix,
+                patch.osc2Tune,
               );
-              amp.gain.setValueAtTime(
-                Math.max(0.02, note.velocity * 0.16),
-                Math.max(startAt + 0.02, endAt - 0.08),
-              );
-              amp.gain.exponentialRampToValueAtTime(0.0001, endAt);
-              osc.connect(amp).connect(bus);
-              osc.start(startAt);
-              osc.stop(endAt + 0.02);
-              if (ctx instanceof AudioContext) sources.current.push(osc);
+              if (patch.sub > 0) {
+                const sub = ctx.createOscillator();
+                const subGain = ctx.createGain();
+                sub.type = 'sine';
+                sub.frequency.value = baseFrequency / 2;
+                subGain.gain.value = patch.sub;
+                sub.connect(subGain).connect(filter);
+                sub.start(startAt);
+                sub.stop(releaseEnd + 0.03);
+                if (ctx instanceof AudioContext) sources.current.push(sub);
+              }
+              if (patch.noise > 0) {
+                const noise = ctx.createBufferSource();
+                const noiseGain = ctx.createGain();
+                const frames = Math.max(
+                  1,
+                  Math.ceil((releaseEnd - startAt) * ctx.sampleRate),
+                );
+                const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < frames; i++)
+                  data[i] = Math.random() * 2 - 1;
+                noise.buffer = buffer;
+                noiseGain.gain.value = patch.noise;
+                noise.connect(noiseGain).connect(filter);
+                noise.start(startAt);
+                if (ctx instanceof AudioContext) sources.current.push(noise);
+              }
+              if (patch.lfoDepth > 0) {
+                const lfo = ctx.createOscillator();
+                const lfoGain = ctx.createGain();
+                lfo.type = 'sine';
+                lfo.frequency.value = patch.lfoRate;
+                lfoGain.gain.value = patch.cutoff * patch.lfoDepth * 0.72;
+                lfo.connect(lfoGain).connect(filter.frequency);
+                lfo.start(startAt);
+                lfo.stop(releaseEnd + 0.03);
+                if (ctx instanceof AudioContext) sources.current.push(lfo);
+              }
             });
         });
       });
@@ -2378,28 +2749,403 @@ export default function Home() {
                 <div className="device synth-device">
                   <div className="device-head">
                     <span>
-                      <Keyboard size={14} /> SIMPLE SYNTH
+                      <Zap size={14} /> NOVAWAVE
                     </span>
-                    <i />
+                    <b>POLYPHONIC DUAL-OSC SYNTH</b>
                   </div>
-                  <div className="synth-visual">
-                    <div className="osc-wave">∿</div>
+                  <div className="synth-preset-row">
                     <label>
-                      WAVEFORM
+                      PRESET
                       <select
-                        value={selectedTrack.waveform}
+                        value={selectedTrack.synth?.preset ?? 'Init Patch'}
                         onChange={(e) =>
-                          updateTrack(selectedTrack.id, {
-                            waveform: e.target.value as OscillatorType,
-                          })
+                          applySynthPreset(selectedTrack.id, e.target.value)
                         }
                       >
-                        <option value="sawtooth">Saw</option>
-                        <option value="square">Square</option>
-                        <option value="sine">Sine</option>
-                        <option value="triangle">Triangle</option>
+                        {(selectedTrack.synth?.preset === 'Custom'
+                          ? [
+                              {
+                                ...INIT_SYNTH,
+                                preset: 'Custom',
+                                category: 'User',
+                              },
+                            ]
+                          : []
+                        )
+                          .concat(SYNTH_PRESETS)
+                          .map((preset) => (
+                            <option key={preset.preset} value={preset.preset}>
+                              {preset.category} · {preset.preset}
+                            </option>
+                          ))}
                       </select>
                     </label>
+                    <div className={`synth-scope ${selectedTrack.synth.osc1}`}>
+                      {Array.from({ length: 28 }, (_, index) => (
+                        <i key={index} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="synth-sections">
+                    <section>
+                      <h4>OSCILLATORS</h4>
+                      <div className="synth-selects">
+                        <label>
+                          OSC A
+                          <select
+                            value={selectedTrack.synth.osc1}
+                            onChange={(e) =>
+                              updateSynth(selectedTrack.id, {
+                                osc1: e.target.value as OscillatorType,
+                              })
+                            }
+                          >
+                            <option value="sawtooth">Saw</option>
+                            <option value="square">Square</option>
+                            <option value="triangle">Triangle</option>
+                            <option value="sine">Sine</option>
+                          </select>
+                        </label>
+                        <label>
+                          OSC B
+                          <select
+                            value={selectedTrack.synth.osc2}
+                            onChange={(e) =>
+                              updateSynth(selectedTrack.id, {
+                                osc2: e.target.value as OscillatorType,
+                              })
+                            }
+                          >
+                            <option value="sawtooth">Saw</option>
+                            <option value="square">Square</option>
+                            <option value="triangle">Triangle</option>
+                            <option value="sine">Sine</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="synth-param">
+                        MIX <b>{Math.round(selectedTrack.synth.mix * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step=".01"
+                          value={selectedTrack.synth.mix}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              mix: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        B TUNE{' '}
+                        <b>
+                          {selectedTrack.synth.osc2Tune > 0 ? '+' : ''}
+                          {selectedTrack.synth.osc2Tune} st
+                        </b>
+                        <input
+                          type="range"
+                          min="-24"
+                          max="24"
+                          step="1"
+                          value={selectedTrack.synth.osc2Tune}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              osc2Tune: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </section>
+                    <section>
+                      <h4>UNISON / COLOR</h4>
+                      <label className="synth-param">
+                        VOICES <b>{selectedTrack.synth.unison}</b>
+                        <input
+                          type="range"
+                          min="1"
+                          max="5"
+                          step="1"
+                          value={selectedTrack.synth.unison}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              unison: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        DETUNE <b>{selectedTrack.synth.detune} ct</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max="35"
+                          step="1"
+                          value={selectedTrack.synth.detune}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              detune: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        WIDTH{' '}
+                        <b>{Math.round(selectedTrack.synth.width * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step=".01"
+                          value={selectedTrack.synth.width}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              width: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        SUB <b>{Math.round(selectedTrack.synth.sub * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max=".8"
+                          step=".01"
+                          value={selectedTrack.synth.sub}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              sub: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </section>
+                    <section>
+                      <h4>FILTER</h4>
+                      <label className="synth-filter-type">
+                        MODE
+                        <select
+                          value={selectedTrack.synth.filterType}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              filterType: e.target.value as BiquadFilterType,
+                            })
+                          }
+                        >
+                          <option value="lowpass">Low-pass</option>
+                          <option value="highpass">High-pass</option>
+                          <option value="bandpass">Band-pass</option>
+                          <option value="notch">Notch</option>
+                        </select>
+                      </label>
+                      <label className="synth-param">
+                        CUTOFF{' '}
+                        <b>
+                          {selectedTrack.synth.cutoff >= 1000
+                            ? `${(selectedTrack.synth.cutoff / 1000).toFixed(1)}k`
+                            : selectedTrack.synth.cutoff}{' '}
+                          Hz
+                        </b>
+                        <input
+                          type="range"
+                          min="80"
+                          max="16000"
+                          step="20"
+                          value={selectedTrack.synth.cutoff}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              cutoff: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        RESONANCE{' '}
+                        <b>{selectedTrack.synth.resonance.toFixed(1)}</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max="18"
+                          step=".1"
+                          value={selectedTrack.synth.resonance}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              resonance: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        DRIVE{' '}
+                        <b>{Math.round(selectedTrack.synth.drive * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step=".01"
+                          value={selectedTrack.synth.drive}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              drive: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </section>
+                    <section>
+                      <h4>AMP ENVELOPE</h4>
+                      <div className="env-grid">
+                        <label className="synth-param">
+                          ATTACK <b>{selectedTrack.synth.attack.toFixed(2)}s</b>
+                          <input
+                            type="range"
+                            min=".002"
+                            max="3"
+                            step=".01"
+                            value={selectedTrack.synth.attack}
+                            onChange={(e) =>
+                              updateSynth(selectedTrack.id, {
+                                attack: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="synth-param">
+                          DECAY <b>{selectedTrack.synth.decay.toFixed(2)}s</b>
+                          <input
+                            type="range"
+                            min=".01"
+                            max="3"
+                            step=".01"
+                            value={selectedTrack.synth.decay}
+                            onChange={(e) =>
+                              updateSynth(selectedTrack.id, {
+                                decay: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="synth-param">
+                          SUSTAIN{' '}
+                          <b>
+                            {Math.round(selectedTrack.synth.sustain * 100)}%
+                          </b>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step=".01"
+                            value={selectedTrack.synth.sustain}
+                            onChange={(e) =>
+                              updateSynth(selectedTrack.id, {
+                                sustain: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="synth-param">
+                          RELEASE{' '}
+                          <b>{selectedTrack.synth.release.toFixed(2)}s</b>
+                          <input
+                            type="range"
+                            min=".01"
+                            max="5"
+                            step=".01"
+                            value={selectedTrack.synth.release}
+                            onChange={(e) =>
+                              updateSynth(selectedTrack.id, {
+                                release: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </section>
+                    <section>
+                      <h4>MOTION</h4>
+                      <label className="synth-param">
+                        LFO RATE{' '}
+                        <b>{selectedTrack.synth.lfoRate.toFixed(1)} Hz</b>
+                        <input
+                          type="range"
+                          min=".05"
+                          max="12"
+                          step=".05"
+                          value={selectedTrack.synth.lfoRate}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              lfoRate: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        FILTER LFO{' '}
+                        <b>{Math.round(selectedTrack.synth.lfoDepth * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step=".01"
+                          value={selectedTrack.synth.lfoDepth}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              lfoDepth: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        NOISE{' '}
+                        <b>{Math.round(selectedTrack.synth.noise * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max=".3"
+                          step=".005"
+                          value={selectedTrack.synth.noise}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              noise: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        DELAY{' '}
+                        <b>{Math.round(selectedTrack.synth.delay * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max=".7"
+                          step=".01"
+                          value={selectedTrack.synth.delay}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              delay: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="synth-param">
+                        SPACE{' '}
+                        <b>{Math.round(selectedTrack.synth.reverb * 100)}%</b>
+                        <input
+                          type="range"
+                          min="0"
+                          max=".8"
+                          step=".01"
+                          value={selectedTrack.synth.reverb}
+                          onChange={(e) =>
+                            updateSynth(selectedTrack.id, {
+                              reverb: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </section>
                   </div>
                 </div>
               )}
