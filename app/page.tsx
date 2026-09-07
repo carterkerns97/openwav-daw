@@ -2229,6 +2229,39 @@ export default function Home() {
       `${copies.length} MIDI note${copies.length > 1 ? 's' : ''} duplicated`,
     );
   }, [checkpoint, selectedClip, selectedNoteIds, snapSeconds, updateClip]);
+  const transposeSelectedNotes = useCallback(
+    (semitones: number) => {
+      if (
+        !selectedClip ||
+        selectedClip.type !== 'midi' ||
+        !selectedNoteIds.length
+      )
+        return;
+      const selected = selectedClip.notes.filter((note) =>
+        selectedNoteIds.includes(note.id),
+      );
+      if (
+        selected.some(
+          (note) => note.pitch + semitones < 0 || note.pitch + semitones > 127,
+        )
+      ) {
+        setStatus('Selection cannot move beyond the MIDI note range');
+        return;
+      }
+      checkpoint();
+      updateClip(selectedClip.id, {
+        notes: selectedClip.notes.map((note) =>
+          selectedNoteIds.includes(note.id)
+            ? { ...note, pitch: note.pitch + semitones }
+            : note,
+        ),
+      });
+      setStatus(
+        `${selected.length} MIDI note${selected.length > 1 ? 's' : ''} moved ${semitones > 0 ? 'up' : 'down'} one octave`,
+      );
+    },
+    [checkpoint, selectedClip, selectedNoteIds, updateClip],
+  );
   useEffect(() => () => stop(), [stop]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -2258,6 +2291,18 @@ export default function Home() {
       ) {
         e.preventDefault();
         setSelectedNoteIds(selectedClip.notes.map((note) => note.id));
+        return;
+      }
+      if (
+        e.shiftKey &&
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+        bottomMode === 'piano' &&
+        selectedNoteIds.length &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLSelectElement)
+      ) {
+        e.preventDefault();
+        transposeSelectedNotes(e.key === 'ArrowUp' ? 12 : -12);
         return;
       }
       if (
@@ -2298,6 +2343,7 @@ export default function Home() {
     selectedClip,
     selectedNoteIds.length,
     stop,
+    transposeSelectedNotes,
     undo,
   ]);
   const bars = Array.from({ length: Math.ceil(duration / 2) }, (_, n) => n + 1);
