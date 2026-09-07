@@ -881,6 +881,8 @@ input[type='range'] {
 .device-tabs {
   display: flex;
   align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid var(--line);
   padding: 0 9px;
   background: #191c1f;
@@ -906,6 +908,7 @@ input[type='range'] {
   color: #99a2a7;
 }
 .piano-options {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -928,7 +931,62 @@ input[type='range'] {
   padding: 0 5px;
   font-size: 8px;
 }
+.chord-generator {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid #333a3e;
+  white-space: nowrap;
+}
+.chord-generator > span {
+  margin-right: 3px;
+  color: #7770a0;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.chord-generator button,
+.chord-generator select {
+  height: 22px;
+  border: 1px solid #363c40;
+  border-radius: 3px;
+  background: #131618;
+  color: #899297;
+  font-size: 7px;
+}
+.chord-generator button {
+  min-width: 23px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.chord-generator button.active {
+  border-color: #8f78de;
+  background: #392f58;
+  color: #e7ddff;
+}
+.chord-generator select {
+  max-width: 65px;
+  padding: 0 3px;
+}
+.chord-generator .generate-chords {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  padding: 0 7px;
+  border-color: #7462af;
+  background: #4b3d73;
+  color: white;
+  font-weight: 900;
+}
+.chord-generator .generate-chords:hover:not(:disabled) {
+  background: #604d93;
+}
 .clip-actions {
+  flex: 0 0 auto;
   margin-left: auto;
   display: flex;
   gap: 3px;
@@ -1786,6 +1844,15 @@ input[type='range'] {
 }
 .midi-note:hover {
   filter: brightness(1.1);
+}
+.midi-note.selected {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+  z-index: 3;
+  filter: brightness(1.12);
+  box-shadow:
+    0 0 0 3px #8e71e855,
+    0 0 9px #b8f25c66;
 }
 .midi-note.invalid-note {
   background: #596166;

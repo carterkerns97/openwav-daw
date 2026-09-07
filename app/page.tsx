@@ -815,6 +815,10 @@ export default function Home() {
   const [noteSnap, setNoteSnap] = useState(0.5);
   const [keyRoot, setKeyRoot] = useState(0);
   const [keyScale, setKeyScale] = useState<'major' | 'minor'>('major');
+  const [chordSequence, setChordSequence] = useState<number[]>([0, 3, 4, 5]);
+  const [chordBeats, setChordBeats] = useState(4);
+  const [chordInversion, setChordInversion] = useState(0);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [selectedDrumPad, setSelectedDrumPad] = useState(0);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [projectName, setProjectName] = useState('Untitled session');
@@ -850,12 +854,9 @@ export default function Home() {
     mode: 'move' | 'left' | 'right';
   } | null>(null);
   const noteGesture = useRef<{
-    noteId: string;
+    notes: Array<Pick<Note, 'id' | 'start' | 'duration' | 'pitch'>>;
     startX: number;
     startY: number;
-    originalStart: number;
-    originalDuration: number;
-    originalPitch: number;
     mode: 'move' | 'resize';
   } | null>(null);
   const loopGesture = useRef<{
@@ -895,6 +896,7 @@ export default function Home() {
   const selectedClip = tracks
     .flatMap((t) => t.clips)
     .find((c) => c.id === selectedClipId);
+  useEffect(() => setSelectedNoteIds([]), [selectedClipId]);
   const drumStepSeconds = 60 / bpm / 4;
   const drumStepCount =
     selectedClip?.type === 'midi'
@@ -1890,34 +1892,39 @@ export default function Home() {
         delta = (event.clientX - g.startX) / pixelsPerBeat,
         snapped = Math.round(delta / snapSeconds) * snapSeconds,
         rowDelta = Math.round((event.clientY - g.startY) / 22),
-        candidatePitch = Math.max(0, Math.min(127, g.originalPitch - rowDelta)),
-        nextPitch = inKey(candidatePitch) ? candidatePitch : g.originalPitch;
-      const notes = selectedClip.notes.map((note) =>
-        note.id !== g.noteId
-          ? note
-          : g.mode === 'resize'
-            ? {
-                ...note,
-                duration: Math.max(
-                  snapSeconds,
-                  Math.min(
-                    selectedClip.duration - note.start,
-                    g.originalDuration + snapped,
-                  ),
-                ),
-              }
-            : {
-                ...note,
-                pitch: nextPitch,
-                start: Math.max(
-                  0,
-                  Math.min(
-                    selectedClip.duration - note.duration,
-                    g.originalStart + snapped,
-                  ),
-                ),
-              },
-      );
+        movedPitches = g.notes.map((note) =>
+          Math.max(0, Math.min(127, note.pitch - rowDelta)),
+        ),
+        pitchMoveAllowed = movedPitches.every(inKey),
+        originals = new Map(g.notes.map((note) => [note.id, note]));
+      const notes = selectedClip.notes.map((note) => {
+        const original = originals.get(note.id);
+        if (!original) return note;
+        if (g.mode === 'resize')
+          return {
+            ...note,
+            duration: Math.max(
+              snapSeconds,
+              Math.min(
+                selectedClip.duration - original.start,
+                original.duration + snapped,
+              ),
+            ),
+          };
+        return {
+          ...note,
+          pitch: pitchMoveAllowed
+            ? Math.max(0, Math.min(127, original.pitch - rowDelta))
+            : original.pitch,
+          start: Math.max(
+            0,
+            Math.min(
+              selectedClip.duration - original.duration,
+              original.start + snapped,
+            ),
+          ),
+        };
+      });
       updateClip(selectedClip.id, { notes });
     };
     const up = () => {
@@ -2069,23 +2076,89 @@ export default function Home() {
     mode: 'move' | 'resize',
   ) => {
     event.stopPropagation();
+    if (!selectedClip || selectedClip.type !== 'midi') return;
+    if (event.shiftKey) {
+      setSelectedNoteIds((current) =>
+        current.includes(note.id)
+          ? current.filter((id) => id !== note.id)
+          : [...current, note.id],
+      );
+      return;
+    }
     checkpoint();
-    let noteId = note.id;
-    if (event.altKey && mode === 'move' && selectedClip) {
-      noteId = crypto.randomUUID();
-      const copy = { ...note, id: noteId };
-      updateClip(selectedClip.id, { notes: [...selectedClip.notes, copy] });
-      setStatus('Note copied — keep dragging to place it');
+    const activeIds = selectedNoteIds.includes(note.id)
+      ? selectedNoteIds
+      : [note.id];
+    let activeNotes = selectedClip.notes.filter((item) =>
+      activeIds.includes(item.id),
+    );
+    if (!selectedNoteIds.includes(note.id)) setSelectedNoteIds([note.id]);
+    if (event.altKey && mode === 'move') {
+      const copies = activeNotes.map((item) => ({
+        ...item,
+        id: crypto.randomUUID(),
+      }));
+      updateClip(selectedClip.id, {
+        notes: [...selectedClip.notes, ...copies],
+      });
+      activeNotes = copies;
+      setSelectedNoteIds(copies.map((item) => item.id));
+      setStatus(`${copies.length} note${copies.length > 1 ? 's' : ''} copied`);
     }
     noteGesture.current = {
-      noteId,
+      notes: activeNotes.map(({ id, start, duration, pitch }) => ({
+        id,
+        start,
+        duration,
+        pitch,
+      })),
       startX: event.clientX,
       startY: event.clientY,
-      originalStart: note.start,
-      originalDuration: note.duration,
-      originalPitch: note.pitch,
       mode,
     };
+  };
+
+  const insertChordSequence = () => {
+    if (!selectedClip || selectedClip.type !== 'midi' || !chordSequence.length)
+      return;
+    checkpoint();
+    const beat = 60 / bpm;
+    const chordDuration = chordBeats * beat;
+    const localPlayhead = Math.max(0, position - selectedClip.start);
+    const insertAt = Math.round(localPlayhead / beat) * beat;
+    const scale =
+      keyScale === 'major' ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+    const created: Note[] = [];
+    chordSequence.forEach((degree, chordIndex) => {
+      const tones = [0, 2, 4].map((step) => {
+        const scaleIndex = degree + step;
+        return (
+          48 + keyRoot + scale[scaleIndex % 7] + 12 * Math.floor(scaleIndex / 7)
+        );
+      });
+      for (let inversion = 0; inversion < chordInversion; inversion++)
+        tones[inversion % tones.length] += 12;
+      tones
+        .sort((a, b) => a - b)
+        .forEach((pitch) =>
+          created.push({
+            id: crypto.randomUUID(),
+            pitch,
+            start: insertAt + chordIndex * chordDuration,
+            duration: Math.max(snapSeconds, chordDuration * 0.92),
+            velocity: 0.78,
+          }),
+        );
+    });
+    const requiredDuration = insertAt + chordSequence.length * chordDuration;
+    updateClip(selectedClip.id, {
+      duration: Math.max(selectedClip.duration, requiredDuration),
+      notes: [...selectedClip.notes, ...created],
+    });
+    setSelectedNoteIds(created.map((note) => note.id));
+    setStatus(
+      `${chordSequence.length}-chord progression added in ${NOTE_NAMES[keyRoot]} ${keyScale}`,
+    );
   };
 
   const toggleNote = (pitch: number, noteStart: number) => {
@@ -2112,6 +2185,50 @@ export default function Home() {
           ];
     updateClip(selectedClip.id, { notes });
   };
+  const deleteSelectedNotes = useCallback(() => {
+    if (
+      !selectedClip ||
+      selectedClip.type !== 'midi' ||
+      !selectedNoteIds.length
+    )
+      return;
+    checkpoint();
+    updateClip(selectedClip.id, {
+      notes: selectedClip.notes.filter(
+        (note) => !selectedNoteIds.includes(note.id),
+      ),
+    });
+    setStatus(
+      `${selectedNoteIds.length} MIDI note${selectedNoteIds.length > 1 ? 's' : ''} deleted`,
+    );
+    setSelectedNoteIds([]);
+  }, [checkpoint, selectedClip, selectedNoteIds, updateClip]);
+  const duplicateSelectedNotes = useCallback(() => {
+    if (
+      !selectedClip ||
+      selectedClip.type !== 'midi' ||
+      !selectedNoteIds.length
+    )
+      return;
+    checkpoint();
+    const copies = selectedClip.notes
+      .filter((note) => selectedNoteIds.includes(note.id))
+      .map((note) => ({
+        ...note,
+        id: crypto.randomUUID(),
+        start: Math.min(
+          selectedClip.duration - note.duration,
+          note.start + snapSeconds,
+        ),
+      }));
+    updateClip(selectedClip.id, {
+      notes: [...selectedClip.notes, ...copies],
+    });
+    setSelectedNoteIds(copies.map((note) => note.id));
+    setStatus(
+      `${copies.length} MIDI note${copies.length > 1 ? 's' : ''} duplicated`,
+    );
+  }, [checkpoint, selectedClip, selectedNoteIds, snapSeconds, updateClip]);
   useEffect(() => () => stop(), [stop]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -2128,7 +2245,19 @@ export default function Home() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
         e.preventDefault();
-        duplicateClip();
+        if (bottomMode === 'piano' && selectedNoteIds.length)
+          duplicateSelectedNotes();
+        else duplicateClip();
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === 'a' &&
+        bottomMode === 'piano' &&
+        selectedClip?.type === 'midi'
+      ) {
+        e.preventDefault();
+        setSelectedNoteIds(selectedClip.notes.map((note) => note.id));
         return;
       }
       if (
@@ -2144,8 +2273,11 @@ export default function Home() {
         e.target instanceof HTMLSelectElement ||
         e.target instanceof HTMLTextAreaElement ||
         (e.target instanceof HTMLElement && e.target.isContentEditable);
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingText)
-        deleteClip();
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingText) {
+        if (bottomMode === 'piano' && selectedNoteIds.length)
+          deleteSelectedNotes();
+        else deleteClip();
+      }
       if (e.key === 'Home' && !editingText) {
         e.preventDefault();
         stop(true);
@@ -2154,7 +2286,20 @@ export default function Home() {
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [deleteClip, duplicateClip, play, playing, redo, stop, undo]);
+  }, [
+    bottomMode,
+    deleteClip,
+    deleteSelectedNotes,
+    duplicateClip,
+    duplicateSelectedNotes,
+    play,
+    playing,
+    redo,
+    selectedClip,
+    selectedNoteIds.length,
+    stop,
+    undo,
+  ]);
   const bars = Array.from({ length: Math.ceil(duration / 2) }, (_, n) => n + 1);
 
   return (
@@ -2851,6 +2996,60 @@ export default function Home() {
                     <option value="2">1/2</option>
                   </select>
                 </label>
+              </div>
+            )}
+            {bottomMode === 'piano' && selectedClip?.type === 'midi' && (
+              <div className="chord-generator">
+                <span>CHORDS</span>
+                {(keyScale === 'major'
+                  ? ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°']
+                  : ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII']
+                ).map((label, degree) => (
+                  <button
+                    className={chordSequence.includes(degree) ? 'active' : ''}
+                    key={label}
+                    title={`${NOTE_NAMES[(keyRoot + scaleNotes[degree]) % 12]} ${label}`}
+                    onClick={() =>
+                      setChordSequence((current) =>
+                        current.includes(degree)
+                          ? current.filter((item) => item !== degree)
+                          : [...current, degree],
+                      )
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+                <select
+                  aria-label="Chord length"
+                  value={chordBeats}
+                  onChange={(event) =>
+                    setChordBeats(Number(event.target.value))
+                  }
+                >
+                  <option value="1">1 beat</option>
+                  <option value="2">2 beats</option>
+                  <option value="4">1 bar</option>
+                  <option value="8">2 bars</option>
+                </select>
+                <select
+                  aria-label="Chord inversion"
+                  value={chordInversion}
+                  onChange={(event) =>
+                    setChordInversion(Number(event.target.value))
+                  }
+                >
+                  <option value="0">Root</option>
+                  <option value="1">1st inv.</option>
+                  <option value="2">2nd inv.</option>
+                </select>
+                <button
+                  className="generate-chords"
+                  disabled={!chordSequence.length}
+                  onClick={insertChordSequence}
+                >
+                  <Sparkles size={11} /> INSERT
+                </button>
               </div>
             )}
             <div className="clip-actions">
@@ -3595,6 +3794,7 @@ export default function Home() {
                     }
                     onPointerDown={(e) => {
                       if (e.target !== e.currentTarget || !inKey(pitch)) return;
+                      setSelectedNoteIds([]);
                       const rect = e.currentTarget.getBoundingClientRect();
                       toggleNote(
                         pitch,
@@ -3607,7 +3807,7 @@ export default function Home() {
                       .filter((note) => note.pitch === pitch)
                       .map((note) => (
                         <button
-                          className={`midi-note ${!inKey(note.pitch) ? 'invalid-note' : ''}`}
+                          className={`midi-note ${!inKey(note.pitch) ? 'invalid-note' : ''} ${selectedNoteIds.includes(note.id) ? 'selected' : ''}`}
                           key={note.id}
                           style={{
                             left: `${(note.start / selectedClip.duration) * 100}%`,
@@ -3621,9 +3821,15 @@ export default function Home() {
                             checkpoint();
                             updateClip(selectedClip.id, {
                               notes: selectedClip.notes.filter(
-                                (n) => n.id !== note.id,
+                                (n) =>
+                                  !(
+                                    selectedNoteIds.includes(note.id)
+                                      ? selectedNoteIds
+                                      : [note.id]
+                                  ).includes(n.id),
                               ),
                             });
+                            setSelectedNoteIds([]);
                           }}
                         >
                           <span>{noteName(note.pitch)}</span>
@@ -3647,8 +3853,8 @@ export default function Home() {
                   )}
               </div>
               <div className="piano-help">
-                Click to add · drag in any direction · Alt-drag to copy · drag
-                right edge to resize · double-click to delete
+                Click to add · Shift-click multi-select · drag selection ·
+                Alt-drag to copy · Ctrl+A selects all
               </div>
             </div>
           ) : null}
