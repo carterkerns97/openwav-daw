@@ -1047,7 +1047,10 @@ export default function Home() {
       if (cached) return cached;
       const sound = DRUM_SOUNDS.find((item) => item.id === soundId);
       if (!sound) return;
-      const response = await fetch(sound.url);
+      const assetUrl = window.openwaveDesktop
+        ? new URL(sound.url.replace(/^\//, ''), window.location.href).href
+        : sound.url;
+      const response = await fetch(assetUrl);
       const buffer = await audioContext().decodeAudioData(
         await response.arrayBuffer(),
       );

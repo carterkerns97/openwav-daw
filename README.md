@@ -1,6 +1,6 @@
 # Openwave
 
-Openwave is a lightweight, open-source multitrack audio workspace that runs entirely in the browser. Audio files and microphone recordings stay on the local device.
+Openwave is an open-source multitrack audio workstation for the desktop and web. The Electron desktop application is now the primary development target; the private web deployment remains a convenient prototype and demo.
 
 ## What works
 
@@ -32,9 +32,20 @@ pnpm dev
 
 Open `http://localhost:3000`, import a few audio files, and press Space to play or pause.
 
+## Run the desktop app
+
+```bash
+pnpm install
+pnpm desktop:dev
+```
+
+Build the offline desktop renderer with `pnpm desktop:renderer`, create an unpacked application with `pnpm desktop:pack`, or generate a platform installer with `pnpm desktop:dist`.
+
+The desktop shell uses context isolation and a narrow preload bridge. Native project open/save dialogs are scaffolded for the upcoming `.openwave` project format.
+
 ## Current limitations
 
-This is still an intentionally small prototype. Sessions are not yet persisted between reloads, BPM does not yet change clip timing, and browser audio support varies by file codec. Plugin hosting requires a future native engine.
+This is still an early prototype. Durable `.openwave` project serialization, autosave, audio-device settings, low-latency native audio, MIDI hardware, and plugin hosting remain roadmap work.
 
 ## License
 

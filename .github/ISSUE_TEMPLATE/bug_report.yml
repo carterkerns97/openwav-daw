@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible Openwave problem
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Add a track\n2. Open the piano roll\n3. ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Web, Windows desktop, macOS desktop, Linux desktop]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional details
+      description: Include browser/app version, audio device, screenshots, or a small project if useful.
