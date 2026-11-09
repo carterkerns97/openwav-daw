@@ -20,6 +20,10 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.p12
+*.pfx
+*.openwave
 
 # debug
 npm-debug.log*
