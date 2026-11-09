@@ -118,6 +118,10 @@ input[type='range'] {
   background: #4ed5a5;
   box-shadow: 0 0 8px #4ed5a577;
 }
+.saved-dot.dirty {
+  background: #f4a261;
+  box-shadow: 0 0 0 3px rgba(244, 162, 97, 0.14);
+}
 .top-actions {
   display: flex;
   gap: 7px;

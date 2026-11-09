@@ -3,6 +3,29 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 
 const isDevelopment = Boolean(process.env.OPENWAVE_DEV_URL);
+const recentProjectsPath = () =>
+  path.join(app.getPath('userData'), 'recent-projects.json');
+const recoveryPath = () =>
+  path.join(app.getPath('userData'), 'recovery.openwave');
+let mainWindow;
+
+async function readRecentProjects() {
+  try {
+    return JSON.parse(await fs.readFile(recentProjectsPath(), 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+async function rememberProject(filePath) {
+  const recent = await readRecentProjects();
+  const next = [filePath, ...recent.filter((item) => item !== filePath)].slice(
+    0,
+    10,
+  );
+  await fs.writeFile(recentProjectsPath(), JSON.stringify(next), 'utf8');
+  return next;
+}
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -20,6 +43,7 @@ function createWindow() {
       sandbox: true,
     },
   });
+  mainWindow = window;
 
   window.once('ready-to-show', () => window.show());
 
@@ -49,26 +73,72 @@ ipcMain.handle('project:open', async () => {
   });
   if (result.canceled || !result.filePaths[0]) return null;
   const filePath = result.filePaths[0];
+  await rememberProject(filePath);
   return { filePath, contents: await fs.readFile(filePath, 'utf8') };
 });
 
 ipcMain.handle('project:save', async (_event, payload) => {
-  const result = await dialog.showSaveDialog({
-    title: 'Save Openwave Project',
-    defaultPath: payload?.suggestedName || 'Untitled.openwave',
-    filters: [{ name: 'Openwave Project', extensions: ['openwave'] }],
-  });
-  if (result.canceled || !result.filePath) return null;
-  await fs.writeFile(result.filePath, payload?.contents || '{}', 'utf8');
-  return { filePath: result.filePath };
+  let filePath = payload?.filePath;
+  if (!filePath || payload?.saveAs) {
+    const result = await dialog.showSaveDialog({
+      title: 'Save Openwave Project',
+      defaultPath: filePath || payload?.suggestedName || 'Untitled.openwave',
+      filters: [{ name: 'Openwave Project', extensions: ['openwave'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    filePath = result.filePath;
+  }
+  await fs.writeFile(filePath, payload?.contents || '{}', 'utf8');
+  await rememberProject(filePath);
+  await fs.rm(recoveryPath(), { force: true });
+  return { filePath };
 });
+
+ipcMain.handle('project:autosave', async (_event, contents) => {
+  await fs.writeFile(recoveryPath(), contents || '{}', 'utf8');
+  return true;
+});
+
+ipcMain.handle('project:recovery', async () => {
+  try {
+    return await fs.readFile(recoveryPath(), 'utf8');
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('project:clear-recovery', async () => {
+  await fs.rm(recoveryPath(), { force: true });
+  return true;
+});
+
+ipcMain.handle('project:recent', readRecentProjects);
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
         label: 'File',
-        submenu: [{ role: 'close' }, { type: 'separator' }, { role: 'quit' }],
+        submenu: [
+          {
+            label: 'Open…',
+            accelerator: 'CmdOrCtrl+O',
+            click: () => mainWindow?.webContents.send('menu:open'),
+          },
+          {
+            label: 'Save',
+            accelerator: 'CmdOrCtrl+S',
+            click: () => mainWindow?.webContents.send('menu:save'),
+          },
+          {
+            label: 'Save As…',
+            accelerator: 'CmdOrCtrl+Shift+S',
+            click: () => mainWindow?.webContents.send('menu:save-as'),
+          },
+          { type: 'separator' },
+          { role: 'close' },
+          { role: 'quit' },
+        ],
       },
       {
         label: 'Edit',
