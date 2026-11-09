@@ -2,6 +2,8 @@
 
 Openwave is an open-source multitrack audio workstation for the desktop and web. The Electron desktop application is now the primary development target; the private web deployment remains a convenient prototype and demo.
 
+Openwave is migrating to a C++20 realtime engine. The React/Electron layer remains the interface while transport, mixing, DSP, audio I/O, recording, and plugin hosting move into `native/`. See [native/README.md](native/README.md) for the engine boundary and migration sequence.
+
 ## What works
 
 - Drag-and-drop or file-picker audio import

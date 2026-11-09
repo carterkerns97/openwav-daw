@@ -17,6 +17,9 @@
     "desktop:renderer": "vite build --config desktop/vite.config.ts",
     "desktop:pack": "pnpm desktop:renderer && electron-builder --dir",
     "desktop:dist": "pnpm desktop:renderer && electron-builder",
+    "native:configure": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release",
+    "native:build": "cmake --build native/build --config Release",
+    "native:test": "ctest --test-dir native/build -C Release --output-on-failure",
     "lint": "oxlint",
     "format": "oxfmt"
   },
