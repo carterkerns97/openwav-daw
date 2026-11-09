@@ -4,16 +4,16 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  root: path.resolve(__dirname, 'renderer'),
+  root: path.resolve(import.meta.dirname, 'renderer'),
   base: './',
-  publicDir: path.resolve(__dirname, '..', 'public'),
+  publicDir: path.resolve(import.meta.dirname, '..', 'public'),
   css: { postcss: { plugins: [tailwindcss()] } },
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, '..') },
+    alias: { '@': path.resolve(import.meta.dirname, '..') },
   },
   build: {
-    outDir: path.resolve(__dirname, '..', 'desktop-dist', 'renderer'),
+    outDir: path.resolve(import.meta.dirname, '..', 'desktop-dist', 'renderer'),
     emptyOutDir: true,
   },
 });
