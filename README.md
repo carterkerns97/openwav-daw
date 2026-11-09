@@ -19,6 +19,8 @@ Openwave is an open-source multitrack audio workstation for the desktop and web.
 - Drag-and-drop effects rack with EQ, compression, reverb, delay, chorus, and saturation
 - Per-track volume, pan, mute, and solo controls
 - Master volume and offline WAV export
+- Portable `.openwave` project files with embedded audio
+- Native Open, Save, and Save As commands with autosave and crash recovery
 - Responsive desktop and tablet workspace
 
 ## Run locally
@@ -41,11 +43,11 @@ pnpm desktop:dev
 
 Build the offline desktop renderer with `pnpm desktop:renderer`, create an unpacked application with `pnpm desktop:pack`, or generate a platform installer with `pnpm desktop:dist`.
 
-The desktop shell uses context isolation and a narrow preload bridge. Native project open/save dialogs are scaffolded for the upcoming `.openwave` project format.
+The desktop shell uses context isolation and a narrow preload bridge. Use Ctrl/Cmd+O to open a project, Ctrl/Cmd+S to save, or Ctrl/Cmd+Shift+S for Save As. Imported and recorded audio is embedded in the project file so sessions remain portable.
 
 ## Current limitations
 
-This is still an early prototype. Durable `.openwave` project serialization, autosave, audio-device settings, low-latency native audio, MIDI hardware, and plugin hosting remain roadmap work.
+This is still an early prototype. Audio-device settings, low-latency native audio, MIDI hardware, plugin hosting, and optimized external media storage remain roadmap work.
 
 ## License
 

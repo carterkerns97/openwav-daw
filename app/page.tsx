@@ -77,8 +77,27 @@ type Clip = {
   duration: number;
   offset: number;
   buffer?: AudioBuffer;
+  sourceData?: string;
+  audioMime?: string;
   peaks: number[];
   notes: Note[];
+};
+type OpenwaveProject = {
+  format: 'openwave-project';
+  version: 1;
+  savedAt: string;
+  name: string;
+  bpm: number;
+  master: number;
+  metronome: boolean;
+  loop: { enabled: boolean; start: number; end: number };
+  editor: {
+    noteSnap: number;
+    keyRoot: number;
+    keyScale: 'major' | 'minor';
+    timelineZoom: number;
+  };
+  tracks: Array<Omit<Track, 'clips'> & { clips: Array<Omit<Clip, 'buffer'>> }>;
 };
 type Track = {
   id: string;
@@ -137,6 +156,21 @@ const COLORS = [
   '#ef6f91',
   '#e9c46a',
 ];
+function arrayBufferToDataUrl(buffer: ArrayBuffer, mime = 'audio/wav') {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
+function dataUrlToArrayBuffer(value: string) {
+  const binary = atob(value.slice(value.indexOf(',') + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++)
+    bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
+}
 const PX = 64;
 const ROW_H = 94;
 const EFFECT_INFO: Record<
@@ -889,6 +923,8 @@ function connectEffects(
 }
 
 export default function Home() {
+  const isDesktop =
+    typeof window !== 'undefined' && Boolean(window.openwaveDesktop);
   const [tracks, setTracks] = useState<Track[]>(() => [
     makeTrack(0),
     makeTrack(1),
@@ -925,6 +961,9 @@ export default function Home() {
   const [selectedDrumPad, setSelectedDrumPad] = useState(0);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [projectName, setProjectName] = useState('Untitled session');
+  const [projectPath, setProjectPath] = useState('');
+  const [savedSignature, setSavedSignature] = useState('');
+  const [projectReady, setProjectReady] = useState(false);
   const contextRef = useRef<AudioContext | null>(null),
     drumBuffers = useRef<Map<string, AudioBuffer>>(new Map()),
     sources = useRef<AudioScheduledSourceNode[]>([]),
@@ -933,6 +972,8 @@ export default function Home() {
     recorder = useRef<MediaRecorder | null>(null),
     chunks = useRef<Blob[]>([]),
     fileInput = useRef<HTMLInputElement>(null);
+  const loadGeneration = useRef(0);
+  const stopRef = useRef<(reset?: boolean) => void>(() => {});
   const pianoEditor = useRef<HTMLDivElement>(null);
   const bpmRef = useRef(120);
   const tempoDrag = useRef<{
@@ -999,6 +1040,42 @@ export default function Home() {
   const selectedClip = tracks
     .flatMap((t) => t.clips)
     .find((c) => c.id === selectedClipId);
+  const projectDocument = useMemo<OpenwaveProject>(
+    () => ({
+      format: 'openwave-project',
+      version: 1,
+      savedAt: new Date(0).toISOString(),
+      name: projectName,
+      bpm,
+      master,
+      metronome,
+      loop: { enabled: loopEnabled, start: loopStart, end: loopEnd },
+      editor: { noteSnap, keyRoot, keyScale, timelineZoom },
+      tracks: tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map(({ buffer: _buffer, ...clip }) => clip),
+      })),
+    }),
+    [
+      bpm,
+      keyRoot,
+      keyScale,
+      loopEnabled,
+      loopEnd,
+      loopStart,
+      master,
+      metronome,
+      noteSnap,
+      projectName,
+      timelineZoom,
+      tracks,
+    ],
+  );
+  const projectSignature = useMemo(
+    () => JSON.stringify(projectDocument),
+    [projectDocument],
+  );
+  const dirty = projectReady && projectSignature !== savedSignature;
   useEffect(() => setSelectedNoteIds([]), [selectedClipId]);
   const drumStepSeconds = 60 / bpm / 4;
   const drumStepCount =
@@ -1041,6 +1118,153 @@ export default function Home() {
     () => contextRef.current ?? (contextRef.current = new AudioContext()),
     [],
   );
+  const loadProjectContents = useCallback(
+    async (contents: string, filePath = '') => {
+      try {
+        const parsed = JSON.parse(contents) as OpenwaveProject;
+        if (parsed.format !== 'openwave-project' || parsed.version !== 1)
+          throw new Error('Unsupported project format');
+        const generation = ++loadGeneration.current;
+        stopRef.current();
+        const restoredTracks: Track[] = await Promise.all(
+          parsed.tracks.map(async (track) => ({
+            ...track,
+            clips: await Promise.all(
+              track.clips.map(async (clip): Promise<Clip> => {
+                if (clip.type !== 'audio' || !clip.sourceData)
+                  return { ...clip };
+                const buffer = await audioContext().decodeAudioData(
+                  dataUrlToArrayBuffer(clip.sourceData),
+                );
+                return { ...clip, buffer, peaks: getPeaks(buffer) };
+              }),
+            ),
+          })),
+        );
+        if (generation !== loadGeneration.current) return;
+        setTracks(restoredTracks);
+        setProjectName(parsed.name || 'Untitled session');
+        setBpm(parsed.bpm || 120);
+        setMaster(parsed.master ?? 0.85);
+        setMetronome(Boolean(parsed.metronome));
+        setLoopEnabled(Boolean(parsed.loop?.enabled));
+        setLoopStart(parsed.loop?.start ?? 0);
+        setLoopEnd(parsed.loop?.end ?? 4);
+        setNoteSnap(parsed.editor?.noteSnap ?? 0.5);
+        setKeyRoot(parsed.editor?.keyRoot ?? 0);
+        setKeyScale(parsed.editor?.keyScale ?? 'major');
+        setTimelineZoom(parsed.editor?.timelineZoom ?? 1);
+        setProjectPath(filePath);
+        setSelectedTrackId(restoredTracks[0]?.id ?? '');
+        setSelectedClipId('');
+        history.current = { undo: [], redo: [] };
+        const normalized = JSON.stringify({
+          ...parsed,
+          savedAt: new Date(0).toISOString(),
+          tracks: restoredTracks.map((track) => ({
+            ...track,
+            clips: track.clips.map(({ buffer: _buffer, ...clip }) => clip),
+          })),
+        });
+        setSavedSignature(normalized);
+        setProjectReady(true);
+        setStatus(`Opened ${parsed.name || 'project'}`);
+      } catch (error) {
+        setStatus(
+          error instanceof Error
+            ? `Could not open project: ${error.message}`
+            : 'Could not open that project',
+        );
+      }
+    },
+    [audioContext],
+  );
+  const openProject = useCallback(async () => {
+    if (!window.openwaveDesktop)
+      return setStatus('Project files are available in the desktop app');
+    if (
+      dirty &&
+      !window.confirm('Discard unsaved changes and open another project?')
+    )
+      return;
+    const result = await window.openwaveDesktop.openProject();
+    if (result) await loadProjectContents(result.contents, result.filePath);
+  }, [dirty, loadProjectContents]);
+  const saveProject = useCallback(
+    async (saveAs = false) => {
+      if (!window.openwaveDesktop)
+        return setStatus(
+          'Native project saving is available in the desktop app',
+        );
+      const contents = JSON.stringify(
+        { ...projectDocument, savedAt: new Date().toISOString() },
+        null,
+        2,
+      );
+      const result = await window.openwaveDesktop.saveProject({
+        suggestedName: `${projectName.trim() || 'Untitled'}.openwave`,
+        contents,
+        filePath: projectPath || undefined,
+        saveAs,
+      });
+      if (!result) return;
+      setProjectPath(result.filePath);
+      setSavedSignature(projectSignature);
+      setStatus(`Saved ${result.filePath.split(/[\\/]/).pop()}`);
+    },
+    [projectDocument, projectName, projectPath, projectSignature],
+  );
+  useEffect(() => {
+    if (!window.openwaveDesktop) {
+      setSavedSignature(projectSignature);
+      setProjectReady(true);
+      return;
+    }
+    void window.openwaveDesktop.getRecovery().then(async (contents) => {
+      if (
+        contents &&
+        window.confirm(
+          'Openwave found an autosaved recovery project. Restore it?',
+        )
+      )
+        await loadProjectContents(contents);
+      else {
+        if (contents) await window.openwaveDesktop?.clearRecovery();
+        setSavedSignature(projectSignature);
+        setProjectReady(true);
+      }
+    });
+    // Startup recovery should run only once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!window.openwaveDesktop || !dirty) return;
+    const timer = window.setTimeout(() => {
+      void window.openwaveDesktop?.autosaveProject(
+        JSON.stringify({
+          ...projectDocument,
+          savedAt: new Date().toISOString(),
+        }),
+      );
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [dirty, projectDocument]);
+  useEffect(() => {
+    if (!window.openwaveDesktop) return;
+    return window.openwaveDesktop.onMenuAction((action) => {
+      if (action === 'open') void openProject();
+      else void saveProject(action === 'save-as');
+    });
+  }, [openProject, saveProject]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
   const loadDrumSound = useCallback(
     async (soundId: string) => {
       const cached = drumBuffers.current.get(soundId);
@@ -1128,6 +1352,7 @@ export default function Home() {
     setPlaying(false);
     if (reset) setPosition(0);
   }, []);
+  stopRef.current = stop;
   const changeTempo = (nextValue: number, saveHistory = true) => {
     const next = Math.max(40, Math.min(240, Math.round(nextValue)));
     const currentBpm = bpmRef.current;
@@ -1496,15 +1721,22 @@ export default function Home() {
       try {
         const ctx = audioContext(),
           decoded = await Promise.all(
-            files.map(async (file) => ({
-              file,
-              buffer: await ctx.decodeAudioData(await file.arrayBuffer()),
-            })),
+            files.map(async (file) => {
+              const bytes = await file.arrayBuffer();
+              return {
+                file,
+                sourceData: arrayBufferToDataUrl(
+                  bytes,
+                  file.type || 'audio/wav',
+                ),
+                buffer: await ctx.decodeAudioData(bytes.slice(0)),
+              };
+            }),
           );
         checkpoint();
         setTracks((current) => {
           const next = current.map((t) => ({ ...t, clips: [...t.clips] }));
-          decoded.forEach(({ file, buffer }, n) => {
+          decoded.forEach(({ file, buffer, sourceData }, n) => {
             let target =
               n === 0
                 ? next.find(
@@ -1523,6 +1755,8 @@ export default function Home() {
               duration: buffer.duration,
               offset: 0,
               buffer,
+              sourceData,
+              audioMime: file.type || 'audio/wav',
               peaks: getPeaks(buffer),
               notes: [],
             };
@@ -1724,11 +1958,9 @@ export default function Home() {
       media.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
-        const buffer = await audioContext().decodeAudioData(
-            await new Blob(chunks.current, {
-              type: media.mimeType,
-            }).arrayBuffer(),
-          ),
+        const blob = new Blob(chunks.current, { type: media.mimeType });
+        const bytes = await blob.arrayBuffer();
+        const buffer = await audioContext().decodeAudioData(bytes.slice(0)),
           clip: Clip = {
             id: crypto.randomUUID(),
             type: 'audio',
@@ -1737,6 +1969,8 @@ export default function Home() {
             duration: buffer.duration,
             offset: 0,
             buffer,
+            sourceData: arrayBufferToDataUrl(bytes, media.mimeType),
+            audioMime: media.mimeType,
             peaks: getPeaks(buffer),
             notes: [],
           };
@@ -2500,7 +2734,10 @@ export default function Home() {
           <span className="prototype">prototype</span>
         </div>
         <div className="project-name">
-          <span className="saved-dot" />
+          <span
+            className={`saved-dot ${dirty ? 'dirty' : ''}`}
+            title={dirty ? 'Unsaved changes' : 'Project saved'}
+          />
           <input
             aria-label="Project name"
             value={projectName}
@@ -2508,6 +2745,22 @@ export default function Home() {
           />
         </div>
         <div className="top-actions">
+          {isDesktop && (
+            <>
+              <button
+                className="ghost-button"
+                onClick={() => void openProject()}
+              >
+                <FolderOpen size={15} /> Open
+              </button>
+              <button
+                className="ghost-button"
+                onClick={() => void saveProject()}
+              >
+                <Save size={15} /> {dirty ? 'Save*' : 'Save'}
+              </button>
+            </>
+          )}
           <button
             className="ghost-button"
             onClick={() => fileInput.current?.click()}
