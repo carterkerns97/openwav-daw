@@ -5,6 +5,16 @@
 #include <span>
 #include <vector>
 
+#if defined(_WIN32)
+#if defined(OPENWAVE_ENGINE_BUILD)
+#define OPENWAVE_ENGINE_API __declspec(dllexport)
+#else
+#define OPENWAVE_ENGINE_API __declspec(dllimport)
+#endif
+#else
+#define OPENWAVE_ENGINE_API __attribute__((visibility("default")))
+#endif
+
 namespace openwave {
 
 struct TrackParameters {
@@ -14,7 +24,7 @@ struct TrackParameters {
   bool solo = false;
 };
 
-class Engine final {
+class OPENWAVE_ENGINE_API Engine final {
 public:
   bool prepare(double sampleRate, std::uint32_t maximumBlockSize,
                std::uint32_t trackCount);
