@@ -2,6 +2,8 @@
 
 This directory is the beginning of Openwave's C++20 realtime audio engine. The React/Electron application remains the control surface while audio responsibilities move behind the stable C ABI in `include/openwave/c_api.h`.
 
+The engine is required to support Windows, macOS, and Linux as equal production targets. Platform audio and MIDI backends belong behind shared interfaces; session behavior and project data must not depend on an operating system.
+
 ## Build
 
 ```bash
